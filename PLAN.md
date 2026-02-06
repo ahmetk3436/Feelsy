@@ -1,493 +1,718 @@
-# Implementation Plan: Add Mood Insights Screen with Weekly Trends
+# Implementation Plan: Add Share Result Card with Gradient Background After Check-In
 
 ## Overview
-Two files need changes:
-1. **CREATE** `mobile/app/(protected)/insights.tsx` — New Insights tab screen
-2. **MODIFY** `mobile/app/(protected)/_layout.tsx` — Add Insights tab to tab bar
+Modify the home screen (`mobile/app/(protected)/home.tsx`) to enhance the post-check-in result card with a richer visual design (colored top banner, completion badge, streak info, border accent) and upgrade the share functionality from plain text to a formatted card-style text share with emoji bars. Also add an auto-share prompt 800ms after successful check-in.
+
+**Files to modify:** 1 file only — `mobile/app/(protected)/home.tsx`
+**No new files.** No new packages. No backend changes.
 
 ---
 
-## FILE 1: CREATE `mobile/app/(protected)/insights.tsx`
+## File 1: MODIFY `mobile/app/(protected)/home.tsx`
 
-### File Purpose
-Displays weekly mood analysis with personalized messages, trend indicators, stat comparisons, best/worst day cards, and a check-in progress bar. Data comes from the backend `GET /api/feels/insights` endpoint.
+### FILE PURPOSE
+Main home screen that shows the daily check-in form (when no check-in exists) or the result card (after check-in), plus stats and badges.
 
-### Imports
+### IMPORTS (full list — line 1-8 of the current file)
+
+Replace the existing import block (lines 1-8) with the following. The ONLY change is adding `Alert` to the react-native import on line 2:
+
 ```typescript
-import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, ScrollView, RefreshControl, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, ScrollView, Pressable, Share, TextInput, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useAuth } from '../../contexts/AuthContext';
+import Button from '../../components/ui/Button';
 import api from '../../lib/api';
-import { getColorForScore, getFeelLabel } from '../../types/feel';
+import { hapticSuccess, hapticSelection, hapticMedium } from '../../lib/haptics';
+import { FeelCheck, FeelStats, MOOD_EMOJIS, getColorForScore, getFeelLabel } from '../../types/feel';
 ```
 
-### Type Definitions (defined at top of file, before component)
+**What changed:** Added `Alert` to the `react-native` import on line 2. All other imports stay identical.
+
+---
+
+### STATE VARIABLES (no changes)
+
+All existing state hooks remain exactly as they are (lines 11-21):
+```typescript
+const { user } = useAuth();
+const [todayCheck, setTodayCheck] = useState<FeelCheck | null>(null);
+const [stats, setStats] = useState<FeelStats | null>(null);
+const [isLoading, setIsLoading] = useState(false);
+const [showCheckin, setShowCheckin] = useState(false);
+const [moodScore, setMoodScore] = useState(50);
+const [energyScore, setEnergyScore] = useState(50);
+const [selectedEmoji, setSelectedEmoji] = useState('😊');
+const [note, setNote] = useState('');
+```
+
+No new state variables are needed.
+
+---
+
+### FUNCTION CHANGES
+
+#### Change 1: Replace `handleShare` function (lines 60-70)
+
+**Current code (to be replaced):**
+```typescript
+  const handleShare = async () => {
+    if (!todayCheck) return;
+    hapticMedium();
+    try {
+      await Share.share({
+        message: `${selectedEmoji} My Feelsy Score: ${todayCheck.feel_score}/100 - ${getFeelLabel(todayCheck.feel_score)}!\n\nTrack your daily vibes with Feelsy`,
+      });
+    } catch (error) {
+      console.log('Share error:', error);
+    }
+  };
+```
+
+**New code (exact replacement):**
+```typescript
+  const handleShare = async () => {
+    if (!todayCheck) return;
+    hapticMedium();
+    try {
+      const label = getFeelLabel(todayCheck.feel_score);
+      const filled = Math.floor(todayCheck.feel_score / 10);
+      const bar = '█'.repeat(filled) + '░'.repeat(10 - filled);
+      const message = `${todayCheck.mood_emoji} My Feelsy Check-In\n\n` +
+        `Score: ${todayCheck.feel_score}/100 — ${label}\n` +
+        `${bar}\n\n` +
+        `Mood: ${todayCheck.mood_score} | Energy: ${todayCheck.energy_score}\n` +
+        (todayCheck.note ? `"${todayCheck.note}"\n\n` : '\n') +
+        `🔥 ${stats?.current_streak || 0} day streak\n\n` +
+        `Track your vibes → Feelsy App`;
+      await Share.share({ message });
+    } catch (error) {
+      console.log('Share error:', error);
+    }
+  };
+```
+
+**What changed:**
+- Uses `todayCheck.mood_emoji` instead of `selectedEmoji` (selectedEmoji is local form state; todayCheck.mood_emoji is the saved value)
+- Computes `label` via `getFeelLabel(todayCheck.feel_score)`
+- Computes `filled` = `Math.floor(todayCheck.feel_score / 10)` — integer from 0 to 10
+- Builds `bar` = filled `█` chars + remaining `░` chars (always 10 chars total)
+- Multi-line message includes: emoji + title, score + label, visual bar, mood + energy breakdown, optional quoted note, streak count, call-to-action
+- The `stats?.current_streak || 0` safely handles null stats
+
+#### Change 2: Add auto-share prompt in `handleCheckIn` (lines 40-58)
+
+**Current code (lines 49-52 inside handleCheckIn):**
+```typescript
+      setTodayCheck(res.data);
+      setShowCheckin(false);
+      hapticSuccess();
+      loadData();
+```
+
+**New code (exact replacement for those 4 lines):**
+```typescript
+      setTodayCheck(res.data);
+      setShowCheckin(false);
+      hapticSuccess();
+      loadData();
+      setTimeout(() => {
+        Alert.alert(
+          'Share Your Vibes?',
+          'Let your friends know how you are feeling!',
+          [
+            { text: 'Not now', style: 'cancel' },
+            { text: 'Share', onPress: handleShare },
+          ]
+        );
+      }, 800);
+```
+
+**What changed:** Added a `setTimeout` after `loadData()` that shows an `Alert.alert` after 800ms. The alert has two buttons: "Not now" (cancel style, dismisses alert) and "Share" (calls `handleShare`). This prompts users to share immediately after check-in while the experience is fresh.
+
+---
+
+### JSX STRUCTURE CHANGES
+
+#### Change 3: Enhance the result card (lines 88-130)
+
+Replace the entire todayCheck truthy branch (lines 88-130) — from the opening `<View className="mt-6 rounded-3xl bg-white p-6 shadow-sm">` to the closing `</View>` before `) : (`.
+
+**Current JSX (lines 88-130):**
+```jsx
+            <View className="mt-6 rounded-3xl bg-white p-6 shadow-sm">
+              <Text className="text-sm font-medium text-gray-500">Today's Feelsy Score</Text>
+              <View className="mt-4 items-center">
+                <View
+                  className="h-32 w-32 items-center justify-center rounded-full"
+                  style={{ backgroundColor: feelColor + '20' }}
+                >
+                  <Text className="text-5xl">{todayCheck.mood_emoji}</Text>
+                </View>
+                <Text className="mt-4 text-5xl font-bold" style={{ color: feelColor }}>
+                  {todayCheck.feel_score}
+                </Text>
+                <Text className="mt-1 text-lg font-medium text-gray-600">
+                  {getFeelLabel(todayCheck.feel_score)}
+                </Text>
+
+                <View className="mt-4 flex-row gap-4">
+                  <View className="items-center">
+                    <Text className="text-sm text-gray-500">Mood</Text>
+                    <Text className="text-lg font-semibold text-gray-900">{todayCheck.mood_score}</Text>
+                  </View>
+                  <View className="h-8 w-px bg-gray-200" />
+                  <View className="items-center">
+                    <Text className="text-sm text-gray-500">Energy</Text>
+                    <Text className="text-lg font-semibold text-gray-900">{todayCheck.energy_score}</Text>
+                  </View>
+                </View>
+
+                {todayCheck.note && (
+                  <Text className="mt-4 text-center text-gray-600 italic">
+                    "{todayCheck.note}"
+                  </Text>
+                )}
+              </View>
+
+              <Button
+                title="Share Your Vibes"
+                variant="outline"
+                onPress={handleShare}
+                size="md"
+              />
+            </View>
+```
+
+**New JSX (exact replacement):**
+```jsx
+            <View
+              className="mt-6 rounded-3xl bg-white p-6 shadow-sm overflow-hidden"
+              style={{ borderWidth: 1, borderColor: feelColor + '40' }}
+            >
+              {/* Colored top banner */}
+              <View
+                className="h-3 rounded-t-3xl -mx-6 -mt-6 mb-4"
+                style={{ backgroundColor: feelColor }}
+              />
+
+              <Text className="text-sm font-medium text-gray-500">Today's Feelsy Score</Text>
+
+              <View className="mt-4 items-center">
+                {/* Daily Check-In Complete badge */}
+                <View className="bg-green-100 px-3 py-1 rounded-full mb-3">
+                  <Text className="text-green-700 text-sm font-medium">Daily Check-In Complete ✓</Text>
+                </View>
+
+                <View
+                  className="h-36 w-36 items-center justify-center rounded-full"
+                  style={{ backgroundColor: feelColor + '20' }}
+                >
+                  <Text className="text-5xl">{todayCheck.mood_emoji}</Text>
+                </View>
+                <Text className="mt-4 text-5xl font-bold" style={{ color: feelColor }}>
+                  {todayCheck.feel_score}
+                </Text>
+                <Text className="mt-1 text-lg font-medium text-gray-600">
+                  {getFeelLabel(todayCheck.feel_score)}
+                </Text>
+
+                <View className="mt-4 flex-row gap-4">
+                  <View className="items-center">
+                    <Text className="text-sm text-gray-500">Mood</Text>
+                    <Text className="text-lg font-semibold text-gray-900">{todayCheck.mood_score}</Text>
+                  </View>
+                  <View className="h-8 w-px bg-gray-200" />
+                  <View className="items-center">
+                    <Text className="text-sm text-gray-500">Energy</Text>
+                    <Text className="text-lg font-semibold text-gray-900">{todayCheck.energy_score}</Text>
+                  </View>
+                </View>
+
+                {/* Streak info */}
+                <View className="mt-3 flex-row items-center">
+                  <Text className="text-sm text-gray-500">🔥 {stats?.current_streak || 0} day streak</Text>
+                </View>
+
+                {todayCheck.note && (
+                  <Text className="mt-4 text-center text-gray-600 italic">
+                    "{todayCheck.note}"
+                  </Text>
+                )}
+              </View>
+
+              <Button
+                title="Share Your Vibes"
+                variant="outline"
+                onPress={handleShare}
+                size="md"
+              />
+            </View>
+```
+
+**Detailed description of every JSX change (top to bottom):**
+
+1. **Outer `<View>` — border and overflow:**
+   - Old: `className="mt-6 rounded-3xl bg-white p-6 shadow-sm"`
+   - New: `className="mt-6 rounded-3xl bg-white p-6 shadow-sm overflow-hidden"` plus `style={{ borderWidth: 1, borderColor: feelColor + '40' }}`
+   - Added `overflow-hidden` className so the top banner's negative margins don't bleed outside the rounded corners
+   - Added inline `style` with `borderWidth: 1` and `borderColor` set to `feelColor + '40'` (the feel color at 25% opacity via hex alpha). Examples: if feelColor is `#22c55e`, borderColor becomes `#22c55e40`
+
+2. **New colored top banner (inserted as first child of outer View, before the "Today's Feelsy Score" text):**
+   ```jsx
+   <View
+     className="h-3 rounded-t-3xl -mx-6 -mt-6 mb-4"
+     style={{ backgroundColor: feelColor }}
+   />
+   ```
+   - `h-3`: 12px tall strip
+   - `rounded-t-3xl`: matches the card's top border radius
+   - `-mx-6`: negative horizontal margin cancels the parent's `p-6` so the banner spans full width
+   - `-mt-6`: negative top margin cancels the parent's `p-6` so the banner sits flush at the card top edge
+   - `mb-4`: 16px margin below to separate from the score title text
+   - `backgroundColor: feelColor`: dynamic color based on the user's feel score (green for high, red for low, etc.)
+
+3. **"Today's Feelsy Score" text — unchanged:** Stays exactly as is.
+
+4. **New "Daily Check-In Complete ✓" badge (inserted inside the `items-center` View, as the first child before the emoji circle):**
+   ```jsx
+   <View className="bg-green-100 px-3 py-1 rounded-full mb-3">
+     <Text className="text-green-700 text-sm font-medium">Daily Check-In Complete ✓</Text>
+   </View>
+   ```
+   - `bg-green-100`: light green background pill
+   - `px-3 py-1`: horizontal 12px, vertical 4px padding
+   - `rounded-full`: pill shape
+   - `mb-3`: 12px margin below before the emoji circle
+   - Text uses `text-green-700` (dark green), `text-sm` (14px), `font-medium` (500 weight)
+   - Content is the literal string `Daily Check-In Complete ✓` (with Unicode check mark U+2713)
+
+5. **Emoji circle — size increase:**
+   - Old: `className="h-32 w-32 items-center justify-center rounded-full"`
+   - New: `className="h-36 w-36 items-center justify-center rounded-full"`
+   - Changed `h-32 w-32` (128px) to `h-36 w-36` (144px) — 16px larger in both dimensions
+   - Everything else about the emoji circle stays identical (style, inner Text)
+
+6. **Score text, label text, mood/energy breakdown — all unchanged.** These stay exactly as they are.
+
+7. **New streak info (inserted immediately after the mood/energy `flex-row gap-4` View, before the note conditional):**
+   ```jsx
+   <View className="mt-3 flex-row items-center">
+     <Text className="text-sm text-gray-500">🔥 {stats?.current_streak || 0} day streak</Text>
+   </View>
+   ```
+   - `mt-3`: 12px margin above
+   - `flex-row items-center`: horizontal layout, vertically centered
+   - Text: `text-sm text-gray-500` — 14px, gray-500 color
+   - Content uses fire emoji `🔥` followed by a space, then `{stats?.current_streak || 0}` (safely handles null stats by defaulting to 0), then ` day streak`
+
+8. **Note conditional and Share button — unchanged.** Both stay exactly as they are.
+
+---
+
+### COMPLETE RESULTING FILE
+
+For absolute clarity, here is the complete file that should result from these changes:
 
 ```typescript
-interface WeeklyInsight {
-  week_start: string;
-  week_end: string;
-  average_mood: number;
-  average_energy: number;
-  average_feel: number;
-  total_checkins: number;
-  best_day: string;
-  worst_day: string;
-  mood_trend: string;
-  dominant_emoji: string;
-  streak_at_end: number;
-}
+import React, { useState, useEffect } from 'react';
+import { View, Text, ScrollView, Pressable, Share, TextInput, Alert } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useAuth } from '../../contexts/AuthContext';
+import Button from '../../components/ui/Button';
+import api from '../../lib/api';
+import { hapticSuccess, hapticSelection, hapticMedium } from '../../lib/haptics';
+import { FeelCheck, FeelStats, MOOD_EMOJIS, getColorForScore, getFeelLabel } from '../../types/feel';
 
-interface InsightsData {
-  current_week: WeeklyInsight;
-  previous_week: WeeklyInsight;
-  improvement: number;
-  message: string;
-}
-```
+export default function HomeScreen() {
+  const { user } = useAuth();
+  const [todayCheck, setTodayCheck] = useState<FeelCheck | null>(null);
+  const [stats, setStats] = useState<FeelStats | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [showCheckin, setShowCheckin] = useState(false);
 
-These interfaces match the backend DTO exactly as defined in `backend/internal/dto/feel_dto.go` lines 59-80. Field names use snake_case matching the JSON tags.
+  // Check-in form state
+  const [moodScore, setMoodScore] = useState(50);
+  const [energyScore, setEnergyScore] = useState(50);
+  const [selectedEmoji, setSelectedEmoji] = useState('😊');
+  const [note, setNote] = useState('');
 
-### State Variables
-```typescript
-const [insights, setInsights] = useState<InsightsData | null>(null);
-const [isLoading, setIsLoading] = useState(true);
-const [isRefreshing, setIsRefreshing] = useState(false);
-```
+  useEffect(() => {
+    loadData();
+  }, []);
 
-### Functions
+  const loadData = async () => {
+    try {
+      const [todayRes, statsRes] = await Promise.all([
+        api.get('/feels/today').catch(() => null),
+        api.get('/feels/stats'),
+      ]);
+      if (todayRes?.data) setTodayCheck(todayRes.data);
+      if (statsRes?.data) setStats(statsRes.data);
+    } catch (error) {
+      console.log('Error loading data:', error);
+    }
+  };
 
-#### `loadInsights(refresh?: boolean)`
-```
-Purpose: Fetches weekly insights from backend API
-Parameters: refresh (optional boolean, default false) — if true, sets isRefreshing instead of isLoading
-Flow:
-  1. If refresh is false (initial load), do NOT set isLoading again (already true from initial state). If refresh is true, setIsRefreshing(true) was called by onRefresh.
-  2. try: const res = await api.get('/feels/insights');
-  3. setInsights(res.data);
-  4. catch (error): console.log('Error loading insights:', error);
-  5. finally: setIsLoading(false); setIsRefreshing(false);
-```
+  const handleCheckIn = async () => {
+    setIsLoading(true);
+    try {
+      const res = await api.post('/feels', {
+        mood_score: moodScore,
+        energy_score: energyScore,
+        mood_emoji: selectedEmoji,
+        note,
+      });
+      setTodayCheck(res.data);
+      setShowCheckin(false);
+      hapticSuccess();
+      loadData();
+      setTimeout(() => {
+        Alert.alert(
+          'Share Your Vibes?',
+          'Let your friends know how you are feeling!',
+          [
+            { text: 'Not now', style: 'cancel' },
+            { text: 'Share', onPress: handleShare },
+          ]
+        );
+      }, 800);
+    } catch (error: any) {
+      console.log('Check-in error:', error.response?.data?.message || error.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-#### `onRefresh()`
-```
-Purpose: Pull-to-refresh handler, wrapped in useCallback
-Flow:
-  1. setIsRefreshing(true);
-  2. call loadInsights(true);
-```
+  const handleShare = async () => {
+    if (!todayCheck) return;
+    hapticMedium();
+    try {
+      const label = getFeelLabel(todayCheck.feel_score);
+      const filled = Math.floor(todayCheck.feel_score / 10);
+      const bar = '█'.repeat(filled) + '░'.repeat(10 - filled);
+      const message = `${todayCheck.mood_emoji} My Feelsy Check-In\n\n` +
+        `Score: ${todayCheck.feel_score}/100 — ${label}\n` +
+        `${bar}\n\n` +
+        `Mood: ${todayCheck.mood_score} | Energy: ${todayCheck.energy_score}\n` +
+        (todayCheck.note ? `"${todayCheck.note}"\n\n` : '\n') +
+        `🔥 ${stats?.current_streak || 0} day streak\n\n` +
+        `Track your vibes → Feelsy App`;
+      await Share.share({ message });
+    } catch (error) {
+      console.log('Share error:', error);
+    }
+  };
 
-#### `formatDate(dateStr: string): string`
-```
-Purpose: Formats ISO date string to human-readable short format
-Implementation:
-  const date = new Date(dateStr);
-  return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-```
-
-#### `getTrendIcon(trend: string): { icon: string; color: string }`
-```
-Purpose: Returns arrow icon and color based on mood trend
-Implementation:
-  if (trend === 'improving') return { icon: '▲', color: '#22c55e' };
-  if (trend === 'declining') return { icon: '▼', color: '#ef4444' };
-  return { icon: '●', color: '#9ca3af' };
-```
-
-### useEffect
-```typescript
-useEffect(() => {
-  loadInsights();
-}, []);
-```
-
-### Component Structure (JSX Tree)
-
-```
-export default function InsightsScreen() {
-  // ... state, functions defined above ...
-
-  // Loading state (shown when isLoading is true AND insights is null)
-  if (isLoading && !insights) {
-    return (
-      <SafeAreaView className="flex-1 bg-gray-50">
-        <View className="flex-1 items-center justify-center">
-          <ActivityIndicator size="large" color="#8b5cf6" />
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  // trend variables (computed before JSX return)
-  const trend = insights ? getTrendIcon(insights.current_week.mood_trend) : null;
-  const cw = insights?.current_week;  // shorthand
-  const pw = insights?.previous_week; // shorthand
+  const feelScore = todayCheck?.feel_score ?? Math.round((moodScore + energyScore) / 2);
+  const feelColor = getColorForScore(feelScore);
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50">
-      {/* Header - matches exact pattern from history.tsx */}
-      <View className="px-6 pt-8 pb-4">
-        <Text className="text-3xl font-bold text-gray-900">Insights</Text>
-        <Text className="mt-1 text-base text-gray-500">Your weekly mood trends</Text>
-      </View>
+      <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 100 }}>
+        <View className="px-6 pt-8">
+          {/* Header */}
+          <Text className="text-3xl font-bold text-gray-900">
+            Hey there
+          </Text>
+          <Text className="mt-1 text-base text-gray-500">
+            How are you feeling today?
+          </Text>
 
-      <ScrollView
-        className="flex-1"
-        contentContainerStyle={{ paddingBottom: 100 }}
-        refreshControl={
-          <RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} />
-        }
-      >
-        {insights && cw ? (
-          <View className="px-6">
-
-            {/* === SECTION 1: Personalized Message Card === */}
+          {/* Today's Check-in Card */}
+          {todayCheck ? (
             <View
-              className="rounded-3xl p-6 shadow-sm mb-6"
-              style={{ backgroundColor: getColorForScore(cw.average_feel) + '15' }}
+              className="mt-6 rounded-3xl bg-white p-6 shadow-sm overflow-hidden"
+              style={{ borderWidth: 1, borderColor: feelColor + '40' }}
             >
-              <Text className="text-5xl text-center">{cw.dominant_emoji || '😊'}</Text>
-              <Text className="mt-4 text-lg font-medium text-gray-800 text-center">
-                {insights.message}
-              </Text>
+              {/* Colored top banner */}
+              <View
+                className="h-3 rounded-t-3xl -mx-6 -mt-6 mb-4"
+                style={{ backgroundColor: feelColor }}
+              />
 
-              {/* Trend Indicator Row */}
-              <View className="mt-4 flex-row items-center justify-center">
-                <Text style={{ color: trend.color, fontSize: 16 }}>{trend.icon}</Text>
-                <Text className="ml-2 text-base font-semibold" style={{ color: trend.color }}>
-                  {cw.mood_trend === 'improving'
-                    ? `+${Math.abs(insights.improvement).toFixed(1)}%`
-                    : cw.mood_trend === 'declining'
-                    ? `-${Math.abs(insights.improvement).toFixed(1)}%`
-                    : 'Stable'}
-                </Text>
-                <Text className="ml-1 text-sm text-gray-500">vs last week</Text>
-              </View>
-            </View>
+              <Text className="text-sm font-medium text-gray-500">Today's Feelsy Score</Text>
 
-            {/* === SECTION 2: This Week Stats — 3-column grid === */}
-            <Text className="text-lg font-semibold text-gray-900 mb-3">This Week</Text>
-            <View className="flex-row gap-3 mb-6">
-              {/* Mood Average */}
-              <View className="flex-1 rounded-2xl bg-white p-4 shadow-sm items-center">
-                <Text className="text-sm text-gray-500">Mood</Text>
-                <Text
-                  className="mt-1 text-2xl font-bold"
-                  style={{ color: getColorForScore(cw.average_mood) }}
+              <View className="mt-4 items-center">
+                {/* Daily Check-In Complete badge */}
+                <View className="bg-green-100 px-3 py-1 rounded-full mb-3">
+                  <Text className="text-green-700 text-sm font-medium">Daily Check-In Complete ✓</Text>
+                </View>
+
+                <View
+                  className="h-36 w-36 items-center justify-center rounded-full"
+                  style={{ backgroundColor: feelColor + '20' }}
                 >
-                  {Math.round(cw.average_mood)}
+                  <Text className="text-5xl">{todayCheck.mood_emoji}</Text>
+                </View>
+                <Text className="mt-4 text-5xl font-bold" style={{ color: feelColor }}>
+                  {todayCheck.feel_score}
                 </Text>
-                <Text className="text-xs text-gray-400">{getFeelLabel(cw.average_mood)}</Text>
-              </View>
-
-              {/* Energy Average */}
-              <View className="flex-1 rounded-2xl bg-white p-4 shadow-sm items-center">
-                <Text className="text-sm text-gray-500">Energy</Text>
-                <Text
-                  className="mt-1 text-2xl font-bold"
-                  style={{ color: getColorForScore(cw.average_energy) }}
-                >
-                  {Math.round(cw.average_energy)}
+                <Text className="mt-1 text-lg font-medium text-gray-600">
+                  {getFeelLabel(todayCheck.feel_score)}
                 </Text>
-                <Text className="text-xs text-gray-400">{getFeelLabel(cw.average_energy)}</Text>
-              </View>
 
-              {/* Feel Average */}
-              <View className="flex-1 rounded-2xl bg-white p-4 shadow-sm items-center">
-                <Text className="text-sm text-gray-500">Feel</Text>
-                <Text
-                  className="mt-1 text-2xl font-bold"
-                  style={{ color: getColorForScore(cw.average_feel) }}
-                >
-                  {Math.round(cw.average_feel)}
-                </Text>
-                <Text className="text-xs text-gray-400">{getFeelLabel(cw.average_feel)}</Text>
-              </View>
-            </View>
-
-            {/* === SECTION 3: vs Last Week Comparison === */}
-            {pw && pw.total_checkins > 0 && (
-              <View className="rounded-2xl bg-white p-4 shadow-sm mb-6">
-                <Text className="text-lg font-semibold text-gray-900 mb-3">vs Last Week</Text>
-                <View className="flex-row justify-between">
-                  {/* Mood comparison */}
-                  <View className="items-center flex-1">
+                <View className="mt-4 flex-row gap-4">
+                  <View className="items-center">
                     <Text className="text-sm text-gray-500">Mood</Text>
-                    <Text className="text-lg font-semibold text-gray-700">
-                      {Math.round(pw.average_mood)}
-                    </Text>
-                    <Text
-                      className="text-sm font-medium"
-                      style={{
-                        color: cw.average_mood >= pw.average_mood ? '#22c55e' : '#ef4444',
-                      }}
-                    >
-                      {cw.average_mood >= pw.average_mood ? '+' : ''}
-                      {Math.round(cw.average_mood - pw.average_mood)}
-                    </Text>
+                    <Text className="text-lg font-semibold text-gray-900">{todayCheck.mood_score}</Text>
                   </View>
-
-                  {/* Energy comparison */}
-                  <View className="items-center flex-1">
+                  <View className="h-8 w-px bg-gray-200" />
+                  <View className="items-center">
                     <Text className="text-sm text-gray-500">Energy</Text>
-                    <Text className="text-lg font-semibold text-gray-700">
-                      {Math.round(pw.average_energy)}
-                    </Text>
-                    <Text
-                      className="text-sm font-medium"
-                      style={{
-                        color: cw.average_energy >= pw.average_energy ? '#22c55e' : '#ef4444',
-                      }}
-                    >
-                      {cw.average_energy >= pw.average_energy ? '+' : ''}
-                      {Math.round(cw.average_energy - pw.average_energy)}
-                    </Text>
-                  </View>
-
-                  {/* Feel comparison */}
-                  <View className="items-center flex-1">
-                    <Text className="text-sm text-gray-500">Feel</Text>
-                    <Text className="text-lg font-semibold text-gray-700">
-                      {Math.round(pw.average_feel)}
-                    </Text>
-                    <Text
-                      className="text-sm font-medium"
-                      style={{
-                        color: cw.average_feel >= pw.average_feel ? '#22c55e' : '#ef4444',
-                      }}
-                    >
-                      {cw.average_feel >= pw.average_feel ? '+' : ''}
-                      {Math.round(cw.average_feel - pw.average_feel)}
-                    </Text>
+                    <Text className="text-lg font-semibold text-gray-900">{todayCheck.energy_score}</Text>
                   </View>
                 </View>
-              </View>
-            )}
 
-            {/* === SECTION 4: Best / Worst Day Cards — side by side === */}
-            <View className="flex-row gap-3 mb-6">
-              {/* Best Day */}
-              <View
-                className="flex-1 rounded-2xl p-4 shadow-sm"
-                style={{ backgroundColor: '#22c55e15' }}
-              >
-                <Text className="text-3xl">🌟</Text>
-                <Text className="mt-2 text-sm font-semibold text-gray-900">Best Day</Text>
-                <Text className="text-sm text-gray-600">
-                  {cw.best_day ? formatDate(cw.best_day) : 'No data yet'}
-                </Text>
-              </View>
+                {/* Streak info */}
+                <View className="mt-3 flex-row items-center">
+                  <Text className="text-sm text-gray-500">🔥 {stats?.current_streak || 0} day streak</Text>
+                </View>
 
-              {/* Worst Day */}
-              <View
-                className="flex-1 rounded-2xl p-4 shadow-sm"
-                style={{ backgroundColor: '#f9731615' }}
-              >
-                <Text className="text-3xl">💪</Text>
-                <Text className="mt-2 text-sm font-semibold text-gray-900">Tough Day</Text>
-                <Text className="text-sm text-gray-600">
-                  {cw.worst_day ? formatDate(cw.worst_day) : 'No data yet'}
-                </Text>
-                {cw.worst_day && (
-                  <Text className="text-xs text-gray-500 mt-1">You got through it!</Text>
+                {todayCheck.note && (
+                  <Text className="mt-4 text-center text-gray-600 italic">
+                    "{todayCheck.note}"
+                  </Text>
                 )}
               </View>
-            </View>
 
-            {/* === SECTION 5: Check-in Progress Bar === */}
-            <View className="rounded-2xl bg-white p-4 shadow-sm mb-6">
-              <View className="flex-row items-center justify-between mb-2">
-                <Text className="text-sm font-semibold text-gray-900">Check-in Progress</Text>
-                <Text className="text-sm text-gray-500">
-                  {cw.total_checkins} of 7 days tracked
-                </Text>
-              </View>
-              <View className="h-2 rounded-full bg-gray-200 overflow-hidden">
-                <View
-                  className="h-full rounded-full"
-                  style={{
-                    width: `${Math.min((cw.total_checkins / 7) * 100, 100)}%`,
-                    backgroundColor: '#8b5cf6',
-                  }}
-                />
-              </View>
-              {cw.total_checkins < 7 && (
-                <Text className="text-xs text-gray-500 mt-2">
-                  {7 - cw.total_checkins} more day{7 - cw.total_checkins !== 1 ? 's' : ''} to complete your week!
-                </Text>
-              )}
-              {cw.total_checkins >= 7 && (
-                <Text className="text-xs text-green-600 mt-2 font-medium">
-                  Full week tracked! Amazing consistency!
-                </Text>
+              <Button
+                title="Share Your Vibes"
+                variant="outline"
+                onPress={handleShare}
+                size="md"
+              />
+            </View>
+          ) : (
+            // Check-in Form
+            <View className="mt-6 rounded-3xl bg-white p-6 shadow-sm">
+              {!showCheckin ? (
+                <Pressable
+                  onPress={() => { setShowCheckin(true); hapticSelection(); }}
+                  className="items-center py-8"
+                >
+                  <Text className="text-6xl">✨</Text>
+                  <Text className="mt-4 text-xl font-semibold text-gray-900">
+                    Log Today's Feels
+                  </Text>
+                  <Text className="mt-2 text-gray-500">
+                    Tap to start your daily check-in
+                  </Text>
+                </Pressable>
+              ) : (
+                <View>
+                  <Text className="text-lg font-semibold text-gray-900 mb-4">Daily Check-In</Text>
+
+                  {/* Mood Score */}
+                  <View className="mb-6">
+                    <Text className="text-sm font-medium text-gray-700 mb-2">
+                      Mood: {moodScore}
+                    </Text>
+                    <View className="flex-row items-center">
+                      <Text className="text-xl mr-2">😔</Text>
+                      <View className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+                        <View
+                          className="h-full rounded-full"
+                          style={{ width: `${moodScore}%`, backgroundColor: getColorForScore(moodScore) }}
+                        />
+                      </View>
+                      <Text className="text-xl ml-2">😊</Text>
+                    </View>
+                    <View className="flex-row justify-between mt-2">
+                      {[20, 40, 60, 80, 100].map((val) => (
+                        <Pressable
+                          key={val}
+                          onPress={() => { setMoodScore(val); hapticSelection(); }}
+                          className="px-3 py-1 rounded-full"
+                          style={{ backgroundColor: moodScore === val ? getColorForScore(val) + '30' : 'transparent' }}
+                        >
+                          <Text style={{ color: getColorForScore(val) }}>{val}</Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  </View>
+
+                  {/* Energy Score */}
+                  <View className="mb-6">
+                    <Text className="text-sm font-medium text-gray-700 mb-2">
+                      Energy: {energyScore}
+                    </Text>
+                    <View className="flex-row items-center">
+                      <Text className="text-xl mr-2">😴</Text>
+                      <View className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+                        <View
+                          className="h-full rounded-full"
+                          style={{ width: `${energyScore}%`, backgroundColor: getColorForScore(energyScore) }}
+                        />
+                      </View>
+                      <Text className="text-xl ml-2">⚡</Text>
+                    </View>
+                    <View className="flex-row justify-between mt-2">
+                      {[20, 40, 60, 80, 100].map((val) => (
+                        <Pressable
+                          key={val}
+                          onPress={() => { setEnergyScore(val); hapticSelection(); }}
+                          className="px-3 py-1 rounded-full"
+                          style={{ backgroundColor: energyScore === val ? getColorForScore(val) + '30' : 'transparent' }}
+                        >
+                          <Text style={{ color: getColorForScore(val) }}>{val}</Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  </View>
+
+                  {/* Emoji Selector */}
+                  <View className="mb-6">
+                    <Text className="text-sm font-medium text-gray-700 mb-2">How do you feel?</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                      <View className="flex-row gap-2">
+                        {MOOD_EMOJIS.map((emoji) => (
+                          <Pressable
+                            key={emoji}
+                            onPress={() => { setSelectedEmoji(emoji); hapticSelection(); }}
+                            className={`w-12 h-12 items-center justify-center rounded-full ${
+                              selectedEmoji === emoji ? 'bg-primary-100' : 'bg-gray-100'
+                            }`}
+                          >
+                            <Text className="text-2xl">{emoji}</Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    </ScrollView>
+                  </View>
+
+                  {/* Note */}
+                  <View className="mb-6">
+                    <Text className="text-sm font-medium text-gray-700 mb-2">Add a note (optional)</Text>
+                    <TextInput
+                      value={note}
+                      onChangeText={setNote}
+                      placeholder="What's on your mind?"
+                      className="bg-gray-100 rounded-xl px-4 py-3 text-base"
+                      multiline
+                      numberOfLines={2}
+                    />
+                  </View>
+
+                  {/* Preview Score */}
+                  <View className="items-center mb-6 p-4 rounded-2xl" style={{ backgroundColor: feelColor + '15' }}>
+                    <Text className="text-sm text-gray-600">Your Feelsy Score</Text>
+                    <Text className="text-4xl font-bold" style={{ color: feelColor }}>{feelScore}</Text>
+                    <Text className="text-lg" style={{ color: feelColor }}>{getFeelLabel(feelScore)}</Text>
+                  </View>
+
+                  <Button
+                    title="Log My Feels"
+                    onPress={handleCheckIn}
+                    isLoading={isLoading}
+                    size="lg"
+                  />
+                </View>
               )}
             </View>
+          )}
 
-          </View>
-        ) : (
-          /* === EMPTY STATE: No insights data === */
-          <View className="flex-1 items-center justify-center py-20 px-6">
-            <Text className="text-6xl mb-4">📊</Text>
-            <Text className="text-lg font-semibold text-gray-900">No insights yet</Text>
-            <Text className="text-gray-500 mt-2 text-center">
-              Start logging your daily feels to see weekly mood trends and personalized insights.
-            </Text>
-          </View>
-        )}
+          {/* Stats Cards */}
+          {stats && (
+            <View className="mt-6 flex-row gap-3">
+              <View className="flex-1 rounded-2xl bg-white p-4 shadow-sm">
+                <Text className="text-3xl">🔥</Text>
+                <Text className="mt-2 text-2xl font-bold text-gray-900">{stats.current_streak}</Text>
+                <Text className="text-sm text-gray-500">Day Streak</Text>
+              </View>
+              <View className="flex-1 rounded-2xl bg-white p-4 shadow-sm">
+                <Text className="text-3xl">📊</Text>
+                <Text className="mt-2 text-2xl font-bold text-gray-900">{stats.total_check_ins}</Text>
+                <Text className="text-sm text-gray-500">Check-ins</Text>
+              </View>
+              <View className="flex-1 rounded-2xl bg-white p-4 shadow-sm">
+                <Text className="text-3xl">✨</Text>
+                <Text className="mt-2 text-2xl font-bold text-gray-900">{Math.round(stats.average_score)}</Text>
+                <Text className="text-sm text-gray-500">Avg Score</Text>
+              </View>
+            </View>
+          )}
+
+          {/* Badges */}
+          {stats && stats.unlocked_badges.length > 0 && (
+            <View className="mt-6 rounded-2xl bg-white p-4 shadow-sm">
+              <Text className="text-lg font-semibold text-gray-900 mb-3">Your Badges</Text>
+              <View className="flex-row flex-wrap gap-2">
+                {stats.unlocked_badges.map((badge) => (
+                  <View key={badge} className="bg-primary-50 px-3 py-1 rounded-full">
+                    <Text className="text-primary-700">{badge}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
 }
 ```
 
-### Styling Summary (NativeWind classes for key elements)
-- **Screen container**: `flex-1 bg-gray-50` (SafeAreaView) — matches history.tsx, home.tsx
-- **Header section**: `px-6 pt-8 pb-4` — matches history.tsx exactly
-- **Header title**: `text-3xl font-bold text-gray-900` — matches all screens
-- **Header subtitle**: `mt-1 text-base text-gray-500` — matches all screens
-- **Personalized message card**: `rounded-3xl p-6 shadow-sm mb-6` + dynamic bg via `style={{ backgroundColor: getColorForScore(...) + '15' }}` — same pattern as home.tsx line 243
-- **Stat columns**: `flex-1 rounded-2xl bg-white p-4 shadow-sm items-center` — matches home.tsx stats cards
-- **Comparison card**: `rounded-2xl bg-white p-4 shadow-sm mb-6` — standard card pattern
-- **Best day card**: `flex-1 rounded-2xl p-4 shadow-sm` with `style={{ backgroundColor: '#22c55e15' }}` (green tint)
-- **Worst day card**: `flex-1 rounded-2xl p-4 shadow-sm` with `style={{ backgroundColor: '#f9731615' }}` (orange tint)
-- **Progress bar outer**: `h-2 rounded-full bg-gray-200 overflow-hidden`
-- **Progress bar inner**: `h-full rounded-full` with `style={{ width: '...%', backgroundColor: '#8b5cf6' }}`
-- **Empty state**: `flex-1 items-center justify-center py-20 px-6` — matches history.tsx pattern
+---
 
-### API Endpoint
-- **Method + Path**: `GET /api/feels/insights`
-- **Auth**: JWT required (protected route, defined in `backend/internal/routes/routes.go` line 47)
-- **Request body**: None (GET request)
-- **Response body** (from `backend/internal/dto/feel_dto.go` lines 75-80):
-```json
-{
-  "current_week": {
-    "week_start": "2026-02-02T00:00:00Z",
-    "week_end": "2026-02-06T00:00:00Z",
-    "average_mood": 72.5,
-    "average_energy": 65.0,
-    "average_feel": 68.75,
-    "total_checkins": 5,
-    "best_day": "2026-02-04T00:00:00Z",
-    "worst_day": "2026-02-03T00:00:00Z",
-    "mood_trend": "improving",
-    "dominant_emoji": "😊",
-    "streak_at_end": 5
-  },
-  "previous_week": {
-    "week_start": "2026-01-26T00:00:00Z",
-    "week_end": "2026-02-01T00:00:00Z",
-    "average_mood": 60.0,
-    "average_energy": 55.0,
-    "average_feel": 57.5,
-    "total_checkins": 4,
-    "best_day": "2026-01-28T00:00:00Z",
-    "worst_day": "2026-01-30T00:00:00Z",
-    "mood_trend": "",
-    "dominant_emoji": "😌",
-    "streak_at_end": 0
-  },
-  "improvement": 19.57,
-  "message": "Great progress! Your mood has improved by 19.6% this week."
-}
-```
+### STYLING REFERENCE
 
-### Navigation Flow
-- This screen is a tab screen in the protected layout — users navigate to it by tapping the "Insights" tab in the bottom tab bar
-- No outbound navigation — this is a read-only display screen
-- No data is passed in or out — the screen fetches its own data from the API on mount
+Key NativeWind classes used in this change:
 
-### Apple Compliance Check
-- **Guest mode**: This screen is inside (protected) layout which allows guest access (line 19 of _layout.tsx: `!isAuthenticated && !isGuest`). Guests can access the tab but the API call will fail (requires JWT). The screen will show the empty state "No insights yet" gracefully because the catch block sets isLoading to false, and insights remains null. This is acceptable behavior — guest users see a clean empty state encouraging them to sign up.
-- **Placeholder text**: Zero placeholder text. All displayed text is either dynamic data or descriptive labels.
-- **Haptic feedback**: Not needed — this screen has no interactive buttons or tappable elements. It's a read-only data display with only pull-to-refresh (which has system-level haptics already).
+| Element | Classes | Purpose |
+|---------|---------|---------|
+| Outer card | `mt-6 rounded-3xl bg-white p-6 shadow-sm overflow-hidden` | Card container with overflow hidden for banner clipping |
+| Outer card style | `borderWidth: 1, borderColor: feelColor + '40'` | Subtle colored border (25% opacity) |
+| Top banner | `h-3 rounded-t-3xl -mx-6 -mt-6 mb-4` | 12px colored strip flush with card top |
+| Complete badge wrapper | `bg-green-100 px-3 py-1 rounded-full mb-3` | Light green pill badge |
+| Complete badge text | `text-green-700 text-sm font-medium` | Dark green badge text |
+| Emoji circle | `h-36 w-36 items-center justify-center rounded-full` | 144px circle (was 128px) |
+| Streak info wrapper | `mt-3 flex-row items-center` | Horizontal streak display |
+| Streak info text | `text-sm text-gray-500` | Small gray streak text |
 
 ---
 
-## FILE 2: MODIFY `mobile/app/(protected)/_layout.tsx`
+### API ENDPOINTS
 
-### File Purpose
-Protected tab layout — need to add the Insights tab between the History tab and the Friends tab.
+No new API endpoints. Existing endpoints used:
+- `GET /api/feels/today` — returns today's `FeelCheck` or 404
+- `GET /api/feels/stats` — returns `FeelStats` with `current_streak`, `total_check_ins`, `average_score`, `unlocked_badges`
+- `POST /api/feels` — creates a new check-in, body: `{ mood_score, energy_score, mood_emoji, note }`
 
-### Current State (lines 54-70)
-```tsx
-      <Tabs.Screen
-        name="history"
-        options={{
-          title: 'History',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="calendar-outline" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="friends"
-        options={{
-          title: 'Friends',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="people-outline" size={size} color={color} />
-          ),
-        }}
-      />
-```
+---
 
-### Exact Change Required
+### NAVIGATION FLOW
 
-Insert the following new `Tabs.Screen` block AFTER the closing `/>` of the "history" `Tabs.Screen` (after line 62) and BEFORE the opening `<Tabs.Screen` of "friends" (line 63):
+- **Where does this screen come from?** Tab bar in `(protected)/_layout.tsx` — it's the "Home" tab
+- **Where does it navigate to?** Nowhere — the share sheet is a system modal opened by `Share.share()`; the Alert is a native dialog
+- **What data does it pass?** Share message is a formatted string passed to the system share sheet
 
-```tsx
-      <Tabs.Screen
-        name="insights"
-        options={{
-          title: 'Insights',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="analytics-outline" size={size} color={color} />
-          ),
-        }}
-      />
-```
+---
 
-### After Modification (lines 54-80 will be)
-```tsx
-      <Tabs.Screen
-        name="history"
-        options={{
-          title: 'History',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="calendar-outline" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="insights"
-        options={{
-          title: 'Insights',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="analytics-outline" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="friends"
-        options={{
-          title: 'Friends',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="people-outline" size={size} color={color} />
-          ),
-        }}
-      />
-```
+### APPLE COMPLIANCE CHECK
 
-### No Import Changes Needed
-The `Ionicons` import and `hapticSelection` import are already present in the file (lines 4-6). No new imports required.
+1. **Does this screen work without login?** This is a protected screen — guest mode users can access it but it requires the auth context. Guest mode is handled by AuthContext. No changes affect guest mode functionality.
+2. **Is there placeholder text?** No. All text is real content: "Daily Check-In Complete ✓", "Today's Feelsy Score", "Share Your Vibes?", etc.
+3. **Does it use haptic feedback on interactions?** Yes — `hapticMedium()` on share button press, `hapticSuccess()` on successful check-in, `hapticSelection()` on form interactions. No new interactive elements were added that lack haptics.
+4. **Alert dialog:** Uses native `Alert.alert` which is fully compliant with iOS HIG. "Not now" uses `style: 'cancel'` for proper iOS button styling.
 
-### Tab Order After Change
-1. Feels (home) — heart-outline
-2. History — calendar-outline
-3. **Insights — analytics-outline** ← NEW
-4. Friends — people-outline
-5. Settings — settings-outline
-6. Paywall — hidden (href: null)
+---
+
+### SUMMARY OF ALL CHANGES
+
+| # | Location | What Changes | Lines Affected |
+|---|----------|-------------|----------------|
+| 1 | Import line 2 | Add `Alert` to react-native imports | Line 2 |
+| 2 | `handleShare` function | Replace plain text share with formatted card-style text | Lines 60-70 |
+| 3 | `handleCheckIn` function | Add `setTimeout` + `Alert.alert` after `loadData()` | After line 52 |
+| 4 | Result card outer View | Add `overflow-hidden`, add border style | Line 89 |
+| 5 | New top banner | Insert colored `View` as first child of card | After line 89 |
+| 6 | New completion badge | Insert green pill badge before emoji circle | Before emoji circle |
+| 7 | Emoji circle | Change `h-32 w-32` to `h-36 w-36` | Line 93 |
+| 8 | New streak info | Insert streak text after mood/energy breakdown | After line 115 |
+
+**No other files need to be created or modified.**
 
 ---
 
@@ -496,10 +721,9 @@ The `Ionicons` import and `hapticSelection` import are already present in the fi
 ### TypeScript Check
 Run: `cd mobile && npx tsc --noEmit`
 
-Expected: No type errors. The interfaces defined in `insights.tsx` match the backend DTO exactly. All imported functions (`getColorForScore`, `getFeelLabel`) exist in `types/feel.ts` and accept `number` parameters. The `api` import returns an Axios instance with `.get()` method.
+Expected: No type errors. `Alert` is a standard react-native export. All other types and functions are already imported and used. The `stats?.current_streak` uses optional chaining matching the existing `FeelStats | null` type.
 
 ### Files Changed Summary
 | Action | File | Lines Changed |
 |--------|------|---------------|
-| CREATE | `mobile/app/(protected)/insights.tsx` | ~220 lines (new file) |
-| MODIFY | `mobile/app/(protected)/_layout.tsx` | +9 lines (insert new Tabs.Screen) |
+| MODIFY | `mobile/app/(protected)/home.tsx` | ~25 lines modified/added |

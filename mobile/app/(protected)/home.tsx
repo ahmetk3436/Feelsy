@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, Pressable, Share, TextInput } from 'react-native';
+import { View, Text, ScrollView, Pressable, Share, TextInput, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
 import Button from '../../components/ui/Button';
@@ -50,6 +50,16 @@ export default function HomeScreen() {
       setShowCheckin(false);
       hapticSuccess();
       loadData();
+      setTimeout(() => {
+        Alert.alert(
+          'Share Your Vibes?',
+          'Let your friends know how you are feeling!',
+          [
+            { text: 'Not now', style: 'cancel' },
+            { text: 'Share', onPress: handleShare },
+          ]
+        );
+      }, 800);
     } catch (error: any) {
       console.log('Check-in error:', error.response?.data?.message || error.message);
     } finally {
@@ -61,9 +71,17 @@ export default function HomeScreen() {
     if (!todayCheck) return;
     hapticMedium();
     try {
-      await Share.share({
-        message: `${selectedEmoji} My Feelsy Score: ${todayCheck.feel_score}/100 - ${getFeelLabel(todayCheck.feel_score)}!\n\nTrack your daily vibes with Feelsy`,
-      });
+      const label = getFeelLabel(todayCheck.feel_score);
+      const filled = Math.floor(todayCheck.feel_score / 10);
+      const bar = '█'.repeat(filled) + '░'.repeat(10 - filled);
+      const message = `${todayCheck.mood_emoji} My Feelsy Check-In\n\n` +
+        `Score: ${todayCheck.feel_score}/100 — ${label}\n` +
+        `${bar}\n\n` +
+        `Mood: ${todayCheck.mood_score} | Energy: ${todayCheck.energy_score}\n` +
+        (todayCheck.note ? `"${todayCheck.note}"\n\n` : '\n') +
+        `🔥 ${stats?.current_streak || 0} day streak\n\n` +
+        `Track your vibes → Feelsy App`;
+      await Share.share({ message });
     } catch (error) {
       console.log('Share error:', error);
     }
@@ -86,11 +104,26 @@ export default function HomeScreen() {
 
           {/* Today's Check-in Card */}
           {todayCheck ? (
-            <View className="mt-6 rounded-3xl bg-white p-6 shadow-sm">
+            <View
+              className="mt-6 rounded-3xl bg-white p-6 shadow-sm overflow-hidden"
+              style={{ borderWidth: 1, borderColor: feelColor + '40' }}
+            >
+              {/* Colored top banner */}
+              <View
+                className="h-3 rounded-t-3xl -mx-6 -mt-6 mb-4"
+                style={{ backgroundColor: feelColor }}
+              />
+
               <Text className="text-sm font-medium text-gray-500">Today's Feelsy Score</Text>
+
               <View className="mt-4 items-center">
+                {/* Daily Check-In Complete badge */}
+                <View className="bg-green-100 px-3 py-1 rounded-full mb-3">
+                  <Text className="text-green-700 text-sm font-medium">Daily Check-In Complete ✓</Text>
+                </View>
+
                 <View
-                  className="h-32 w-32 items-center justify-center rounded-full"
+                  className="h-36 w-36 items-center justify-center rounded-full"
                   style={{ backgroundColor: feelColor + '20' }}
                 >
                   <Text className="text-5xl">{todayCheck.mood_emoji}</Text>
@@ -112,6 +145,11 @@ export default function HomeScreen() {
                     <Text className="text-sm text-gray-500">Energy</Text>
                     <Text className="text-lg font-semibold text-gray-900">{todayCheck.energy_score}</Text>
                   </View>
+                </View>
+
+                {/* Streak info */}
+                <View className="mt-3 flex-row items-center">
+                  <Text className="text-sm text-gray-500">🔥 {stats?.current_streak || 0} day streak</Text>
                 </View>
 
                 {todayCheck.note && (
