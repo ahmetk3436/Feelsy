@@ -34,6 +34,13 @@ export interface FriendFeel {
   color_hex: string;
 }
 
+export interface FriendRequest {
+  id: string;
+  user_id: string;
+  friend_email: string;
+  created_at: string;
+}
+
 export type VibeType = 'hug' | 'high-five' | 'sunshine' | 'heart' | 'star';
 
 export const VIBE_EMOJIS: Record<VibeType, string> = {

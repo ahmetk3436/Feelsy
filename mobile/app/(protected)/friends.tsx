@@ -1,14 +1,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, FlatList, RefreshControl, Pressable, Modal, TextInput } from 'react-native';
+import { View, Text, FlatList, RefreshControl, Pressable, Modal, TextInput, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import api from '../../lib/api';
 import Button from '../../components/ui/Button';
-import { hapticSuccess, hapticSelection } from '../../lib/haptics';
-import { GoodVibe, FriendFeel, VIBE_EMOJIS, VibeType, getColorForScore } from '../../types/feel';
+import { hapticSuccess, hapticSelection, hapticError } from '../../lib/haptics';
+import { GoodVibe, FriendFeel, FriendRequest, VIBE_EMOJIS, VibeType, getColorForScore } from '../../types/feel';
 
 export default function FriendsScreen() {
   const [friends, setFriends] = useState<FriendFeel[]>([]);
   const [vibes, setVibes] = useState<GoodVibe[]>([]);
+  const [requests, setRequests] = useState<FriendRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showVibeModal, setShowVibeModal] = useState(false);
@@ -16,6 +17,8 @@ export default function FriendsScreen() {
   const [selectedVibe, setSelectedVibe] = useState<VibeType>('heart');
   const [vibeMessage, setVibeMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
+  const [friendEmail, setFriendEmail] = useState('');
+  const [isAdding, setIsAdding] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -23,12 +26,14 @@ export default function FriendsScreen() {
 
   const loadData = async () => {
     try {
-      const [friendsRes, vibesRes] = await Promise.all([
+      const [friendsRes, vibesRes, requestsRes] = await Promise.all([
         api.get('/feels/friends'),
         api.get('/feels/vibes?limit=20'),
+        api.get('/feels/friends/requests'),
       ]);
       setFriends(friendsRes.data?.data || []);
       setVibes(vibesRes.data?.data || []);
+      setRequests(requestsRes.data?.data || []);
     } catch (error) {
       console.log('Error loading data:', error);
     } finally {
@@ -41,6 +46,68 @@ export default function FriendsScreen() {
     setIsRefreshing(true);
     loadData();
   }, []);
+
+  const addFriend = async () => {
+    if (!friendEmail.trim()) return;
+    setIsAdding(true);
+    try {
+      await api.post('/feels/friends', { friend_email: friendEmail.trim() });
+      hapticSuccess();
+      setFriendEmail('');
+      loadData();
+    } catch (error: any) {
+      hapticError();
+      Alert.alert('Error', error.response?.data?.message || 'Could not send friend request');
+    } finally {
+      setIsAdding(false);
+    }
+  };
+
+  const acceptRequest = async (id: string) => {
+    try {
+      await api.put(`/feels/friends/${id}/accept`);
+      hapticSuccess();
+      loadData();
+    } catch (error: any) {
+      hapticError();
+      Alert.alert('Error', error.response?.data?.message || 'Could not accept request');
+    }
+  };
+
+  const declineRequest = async (id: string) => {
+    try {
+      await api.delete(`/feels/friends/${id}/reject`);
+      hapticSelection();
+      loadData();
+    } catch (error: any) {
+      hapticError();
+      Alert.alert('Error', error.response?.data?.message || 'Could not decline request');
+    }
+  };
+
+  const removeFriend = (friend: FriendFeel) => {
+    Alert.alert(
+      'Remove Friend',
+      `Remove ${friend.name} from your friends?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await api.delete(`/feels/friends/${friend.user_id}`);
+              hapticSuccess();
+              loadData();
+            } catch (error: any) {
+              hapticError();
+              Alert.alert('Error', error.response?.data?.message || 'Could not remove friend');
+            }
+          },
+        },
+      ]
+    );
+  };
 
   const openVibeModal = (friend: FriendFeel) => {
     setSelectedFriend(friend);
@@ -73,6 +140,7 @@ export default function FriendsScreen() {
     return (
       <Pressable
         onPress={() => openVibeModal(item)}
+        onLongPress={() => removeFriend(item)}
         className="mx-4 mb-3 rounded-2xl bg-white p-4 shadow-sm active:opacity-70"
       >
         <View className="flex-row items-center justify-between">
@@ -115,6 +183,43 @@ export default function FriendsScreen() {
     </View>
   );
 
+  const renderRequest = ({ item }: { item: FriendRequest }) => (
+    <View className="mx-4 mb-3 rounded-2xl bg-white p-4 shadow-sm">
+      <View className="flex-row items-center justify-between">
+        <View className="flex-1 mr-3">
+          <Text className="text-base font-medium text-gray-900">{item.friend_email}</Text>
+          <Text className="text-xs text-gray-400 mt-1">
+            {new Date(item.created_at).toLocaleDateString()}
+          </Text>
+        </View>
+        <View className="flex-row">
+          <Pressable
+            onPress={() => declineRequest(item.id)}
+            className="rounded-lg bg-gray-200 px-4 py-2 mr-2"
+          >
+            <Text className="text-sm font-medium text-gray-700">Decline</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => acceptRequest(item.id)}
+            className="rounded-lg bg-green-500 px-4 py-2"
+          >
+            <Text className="text-sm font-medium text-white">Accept</Text>
+          </Pressable>
+        </View>
+      </View>
+    </View>
+  );
+
+  if (isLoading) {
+    return (
+      <SafeAreaView className="flex-1 bg-gray-50">
+        <View className="flex-1 items-center justify-center">
+          <ActivityIndicator size="large" color="#8b5cf6" />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView className="flex-1 bg-gray-50">
       <View className="px-6 pt-8 pb-4">
@@ -124,22 +229,6 @@ export default function FriendsScreen() {
         </Text>
       </View>
 
-      {/* Friends Section */}
-      {friends.length > 0 && (
-        <View className="mb-4">
-          <Text className="px-6 text-lg font-semibold text-gray-900 mb-3">Today's Feels</Text>
-          <FlatList
-            data={friends}
-            renderItem={renderFriend}
-            keyExtractor={(item) => item.user_id}
-            horizontal={false}
-            scrollEnabled={false}
-          />
-        </View>
-      )}
-
-      {/* Vibes Section */}
-      <Text className="px-6 text-lg font-semibold text-gray-900 mb-3">Received Vibes</Text>
       <FlatList
         data={vibes}
         renderItem={renderVibe}
@@ -147,8 +236,79 @@ export default function FriendsScreen() {
         refreshControl={
           <RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} />
         }
+        ListHeaderComponent={
+          <>
+            {/* Add Friend Section */}
+            <View className="mx-4 mb-6">
+              <View className="flex-row items-center">
+                <TextInput
+                  value={friendEmail}
+                  onChangeText={setFriendEmail}
+                  placeholder="Friend's email address"
+                  placeholderTextColor="#9ca3af"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  className="flex-1 rounded-xl bg-gray-100 px-4 py-3 text-base mr-3"
+                />
+                <Button
+                  title="Add Friend"
+                  variant="primary"
+                  size="sm"
+                  isLoading={isAdding}
+                  onPress={addFriend}
+                />
+              </View>
+            </View>
+
+            {/* Friend Requests Section */}
+            {requests.length > 0 && (
+              <View className="mb-4">
+                <View className="flex-row items-center px-6 mb-3">
+                  <Text className="text-lg font-semibold text-gray-900">Friend Requests</Text>
+                  <View className="ml-2 rounded-full bg-primary-100 px-2 py-0.5">
+                    <Text className="text-xs font-semibold text-primary-700">{requests.length}</Text>
+                  </View>
+                </View>
+                <FlatList
+                  data={requests}
+                  renderItem={renderRequest}
+                  keyExtractor={(item) => item.id}
+                  scrollEnabled={false}
+                />
+              </View>
+            )}
+
+            {/* Friends List Section */}
+            {friends.length > 0 && (
+              <View className="mb-4">
+                <Text className="px-6 text-lg font-semibold text-gray-900 mb-3">Today's Feels</Text>
+                <FlatList
+                  data={friends}
+                  renderItem={renderFriend}
+                  keyExtractor={(item) => item.user_id}
+                  scrollEnabled={false}
+                />
+              </View>
+            )}
+
+            {/* Empty State */}
+            {friends.length === 0 && requests.length === 0 && (
+              <View className="items-center justify-center py-10">
+                <Text className="text-5xl mb-3">👋</Text>
+                <Text className="text-lg font-medium text-gray-500">No friends yet</Text>
+                <Text className="text-sm text-gray-400 mt-1">Add friends by email to share vibes!</Text>
+              </View>
+            )}
+
+            {/* Vibes Section Header */}
+            {vibes.length > 0 && (
+              <Text className="px-6 text-lg font-semibold text-gray-900 mb-3">Received Vibes</Text>
+            )}
+          </>
+        }
         ListEmptyComponent={
-          !isLoading ? (
+          friends.length > 0 || requests.length > 0 ? (
             <View className="items-center justify-center py-10">
               <Text className="text-5xl mb-3">💜</Text>
               <Text className="text-gray-500">No vibes yet</Text>
@@ -159,7 +319,7 @@ export default function FriendsScreen() {
         contentContainerStyle={{ paddingBottom: 100 }}
       />
 
-      {/* Send Vibe Modal */}
+      {/* Send Vibe Modal — UNCHANGED */}
       <Modal
         visible={showVibeModal}
         animationType="slide"
