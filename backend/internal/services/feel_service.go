@@ -277,7 +277,7 @@ func (s *FeelService) GetFriendFeels(userID uuid.UUID) ([]map[string]interface{}
 		user := userMap[check.UserID]
 		result = append(result, map[string]interface{}{
 			"user_id":    check.UserID,
-			"email":      user.Email,
+			"name":       user.Email,
 			"feel_score": check.FeelScore,
 			"mood_emoji": check.MoodEmoji,
 			"color_hex":  check.ColorHex,
@@ -286,4 +286,169 @@ func (s *FeelService) GetFriendFeels(userID uuid.UUID) ([]map[string]interface{}
 	}
 
 	return result, nil
+}
+
+// SendFriendRequest sends a friend request to a user by email
+func (s *FeelService) SendFriendRequest(userID uuid.UUID, friendEmail string) (*models.FeelFriend, error) {
+	// Look up friend by email
+	var friend models.User
+	if err := s.db.Where("email = ?", friendEmail).First(&friend).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errors.New("user not found with that email")
+		}
+		return nil, err
+	}
+
+	// Cannot add yourself
+	if friend.ID == userID {
+		return nil, errors.New("cannot send friend request to yourself")
+	}
+
+	// Check for existing relationship in either direction
+	var existing models.FeelFriend
+	err := s.db.Where(
+		"((user_id = ? AND friend_id = ?) OR (user_id = ? AND friend_id = ?))",
+		userID, friend.ID, friend.ID, userID,
+	).First(&existing).Error
+	if err == nil {
+		if existing.Status == "pending" {
+			return nil, errors.New("friend request already pending")
+		}
+		if existing.Status == "accepted" {
+			return nil, errors.New("already friends")
+		}
+		if existing.Status == "blocked" {
+			return nil, errors.New("cannot send friend request")
+		}
+	}
+
+	// Create friend request
+	request := &models.FeelFriend{
+		UserID:   userID,
+		FriendID: friend.ID,
+		Status:   "pending",
+	}
+	if err := s.db.Create(request).Error; err != nil {
+		return nil, err
+	}
+
+	// Preload Friend relationship for the response
+	s.db.Preload("Friend").First(request, "id = ?", request.ID)
+
+	return request, nil
+}
+
+// AcceptFriendRequest accepts a pending friend request
+func (s *FeelService) AcceptFriendRequest(userID, requestID uuid.UUID) error {
+	var request models.FeelFriend
+	if err := s.db.First(&request, "id = ?", requestID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return errors.New("friend request not found")
+		}
+		return err
+	}
+
+	// Only the recipient (friend_id) can accept
+	if request.FriendID != userID {
+		return errors.New("not authorized to accept this request")
+	}
+
+	if request.Status != "pending" {
+		return errors.New("request is not pending")
+	}
+
+	request.Status = "accepted"
+	return s.db.Save(&request).Error
+}
+
+// RejectFriendRequest rejects and deletes a pending friend request
+func (s *FeelService) RejectFriendRequest(userID, requestID uuid.UUID) error {
+	var request models.FeelFriend
+	if err := s.db.First(&request, "id = ?", requestID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return errors.New("friend request not found")
+		}
+		return err
+	}
+
+	// Only the recipient (friend_id) can reject
+	if request.FriendID != userID {
+		return errors.New("not authorized to reject this request")
+	}
+
+	if request.Status != "pending" {
+		return errors.New("request is not pending")
+	}
+
+	return s.db.Delete(&request).Error
+}
+
+// ListFriendRequests returns pending friend requests received by a user
+func (s *FeelService) ListFriendRequests(userID uuid.UUID) ([]models.FeelFriend, error) {
+	var requests []models.FeelFriend
+	err := s.db.Where("friend_id = ? AND status = ?", userID, "pending").
+		Preload("User").
+		Order("created_at DESC").
+		Find(&requests).Error
+	return requests, err
+}
+
+// ListFriends returns all accepted friends for a user
+func (s *FeelService) ListFriends(userID uuid.UUID) ([]map[string]interface{}, error) {
+	var friendships []models.FeelFriend
+	err := s.db.Where("(user_id = ? OR friend_id = ?) AND status = ?", userID, userID, "accepted").
+		Find(&friendships).Error
+	if err != nil {
+		return nil, err
+	}
+
+	if len(friendships) == 0 {
+		return []map[string]interface{}{}, nil
+	}
+
+	// Collect the other user's ID from each friendship
+	friendIDs := make([]uuid.UUID, 0, len(friendships))
+	friendshipMap := make(map[uuid.UUID]uuid.UUID) // friendUserID -> friendshipID
+	for _, f := range friendships {
+		if f.UserID == userID {
+			friendIDs = append(friendIDs, f.FriendID)
+			friendshipMap[f.FriendID] = f.ID
+		} else {
+			friendIDs = append(friendIDs, f.UserID)
+			friendshipMap[f.UserID] = f.ID
+		}
+	}
+
+	var users []models.User
+	s.db.Where("id IN ?", friendIDs).Find(&users)
+
+	result := make([]map[string]interface{}, 0, len(users))
+	for _, u := range users {
+		result = append(result, map[string]interface{}{
+			"id":           friendshipMap[u.ID].String(),
+			"friend_id":    u.ID.String(),
+			"friend_email": u.Email,
+			"status":       "accepted",
+		})
+	}
+
+	return result, nil
+}
+
+// RemoveFriend removes a friend connection
+func (s *FeelService) RemoveFriend(userID, friendshipID uuid.UUID) error {
+	var friendship models.FeelFriend
+	if err := s.db.First(&friendship, "id = ?", friendshipID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return errors.New("friendship not found")
+		}
+		return err
+	}
+
+	// Either party can remove the friendship
+	if friendship.UserID != userID && friendship.FriendID != userID {
+		return errors.New("not authorized to remove this friendship")
+	}
+
+	return s.db.Delete(&friendship).Error
 }

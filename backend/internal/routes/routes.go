@@ -48,6 +48,14 @@ func Setup(
 	feels.Get("/vibes", feelHandler.GetReceivedVibes)   // Get received vibes
 	feels.Get("/friends", feelHandler.GetFriendFeels)   // Get friend feels today
 
+	// Friend request management
+	feels.Post("/friends/add", feelHandler.SendFriendRequest)              // Send friend request by email
+	feels.Get("/friends/requests", feelHandler.ListFriendRequests)         // List pending incoming requests
+	feels.Get("/friends/list", feelHandler.ListFriends)                    // List accepted friends
+	feels.Put("/friends/:id/accept", feelHandler.AcceptFriendRequest)      // Accept friend request
+	feels.Delete("/friends/:id/reject", feelHandler.RejectFriendRequest)   // Reject friend request
+	feels.Delete("/friends/:id", feelHandler.RemoveFriend)                 // Remove friend
+
 	// Admin moderation panel (protected + admin check)
 	// In production, add an admin role middleware here
 	admin := api.Group("/admin", middleware.JWTProtected(cfg))

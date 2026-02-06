@@ -181,3 +181,153 @@ func (h *FeelHandler) GetFriendFeels(c *fiber.Ctx) error {
 		"data": feels,
 	})
 }
+
+// SendFriendRequest handles POST /api/feels/friends/add
+func (h *FeelHandler) SendFriendRequest(c *fiber.Ctx) error {
+	userToken := c.Locals("user").(*jwt.Token)
+	claims := userToken.Claims.(jwt.MapClaims)
+	userID, _ := uuid.Parse(claims["sub"].(string))
+
+	var req dto.SendFriendRequestRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":   true,
+			"message": "Invalid request body",
+		})
+	}
+
+	if req.FriendEmail == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":   true,
+			"message": "friend_email is required",
+		})
+	}
+
+	request, err := h.service.SendFriendRequest(userID, req.FriendEmail)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":   true,
+			"message": err.Error(),
+		})
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
+		"data": request,
+	})
+}
+
+// AcceptFriendRequest handles PUT /api/feels/friends/:id/accept
+func (h *FeelHandler) AcceptFriendRequest(c *fiber.Ctx) error {
+	userToken := c.Locals("user").(*jwt.Token)
+	claims := userToken.Claims.(jwt.MapClaims)
+	userID, _ := uuid.Parse(claims["sub"].(string))
+
+	requestID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":   true,
+			"message": "Invalid request ID",
+		})
+	}
+
+	if err := h.service.AcceptFriendRequest(userID, requestID); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":   true,
+			"message": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"message": "Friend request accepted",
+	})
+}
+
+// RejectFriendRequest handles DELETE /api/feels/friends/:id/reject
+func (h *FeelHandler) RejectFriendRequest(c *fiber.Ctx) error {
+	userToken := c.Locals("user").(*jwt.Token)
+	claims := userToken.Claims.(jwt.MapClaims)
+	userID, _ := uuid.Parse(claims["sub"].(string))
+
+	requestID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":   true,
+			"message": "Invalid request ID",
+		})
+	}
+
+	if err := h.service.RejectFriendRequest(userID, requestID); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":   true,
+			"message": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"message": "Friend request rejected",
+	})
+}
+
+// ListFriendRequests handles GET /api/feels/friends/requests
+func (h *FeelHandler) ListFriendRequests(c *fiber.Ctx) error {
+	userToken := c.Locals("user").(*jwt.Token)
+	claims := userToken.Claims.(jwt.MapClaims)
+	userID, _ := uuid.Parse(claims["sub"].(string))
+
+	requests, err := h.service.ListFriendRequests(userID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":   true,
+			"message": "Failed to fetch friend requests",
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"data": requests,
+	})
+}
+
+// ListFriends handles GET /api/feels/friends/list
+func (h *FeelHandler) ListFriends(c *fiber.Ctx) error {
+	userToken := c.Locals("user").(*jwt.Token)
+	claims := userToken.Claims.(jwt.MapClaims)
+	userID, _ := uuid.Parse(claims["sub"].(string))
+
+	friends, err := h.service.ListFriends(userID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":   true,
+			"message": "Failed to fetch friends",
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"data": friends,
+	})
+}
+
+// RemoveFriend handles DELETE /api/feels/friends/:id
+func (h *FeelHandler) RemoveFriend(c *fiber.Ctx) error {
+	userToken := c.Locals("user").(*jwt.Token)
+	claims := userToken.Claims.(jwt.MapClaims)
+	userID, _ := uuid.Parse(claims["sub"].(string))
+
+	friendshipID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":   true,
+			"message": "Invalid friendship ID",
+		})
+	}
+
+	if err := h.service.RemoveFriend(userID, friendshipID); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":   true,
+			"message": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"message": "Friend removed",
+	})
+}

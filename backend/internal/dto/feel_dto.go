@@ -35,3 +35,23 @@ type FeelStatsResponse struct {
 	AverageScore   float64  `json:"average_score"`
 	UnlockedBadges []string `json:"unlocked_badges"`
 }
+
+// SendFriendRequestRequest represents a request to send a friend request
+type SendFriendRequestRequest struct {
+	FriendEmail string `json:"friend_email" validate:"required,email"`
+}
+
+// FriendRequestResponse represents a friend request in API responses
+type FriendRequestResponse struct {
+	ID          string `json:"id"`
+	UserID      string `json:"user_id"`
+	FriendID    string `json:"friend_id"`
+	Status      string `json:"status"`
+	FriendEmail string `json:"friend_email"`
+	CreatedAt   string `json:"created_at"`
+}
+
+// AcceptFriendRequestRequest represents a request to accept a friend request
+type AcceptFriendRequestRequest struct {
+	RequestID string `json:"request_id" validate:"required,uuid"`
+}
