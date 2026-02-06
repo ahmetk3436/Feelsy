@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, Pressable, Alert, Switch } from 'react-native';
+import { View, Text, Pressable, Alert, Switch, Linking, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as SecureStore from 'expo-secure-store';
+import Constants from 'expo-constants';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSubscription } from '../../contexts/SubscriptionContext';
+import { useRouter } from 'expo-router';
 import { isBiometricAvailable, getBiometricType } from '../../lib/biometrics';
-import { hapticWarning, hapticMedium, hapticSuccess, hapticError } from '../../lib/haptics';
+import { hapticWarning, hapticMedium, hapticSuccess, hapticError, hapticLight } from '../../lib/haptics';
+import { Ionicons } from '@expo/vector-icons';
 import Button from '../../components/ui/Button';
 import Modal from '../../components/ui/Modal';
 import Input from '../../components/ui/Input';
@@ -14,7 +17,8 @@ const BIOMETRIC_KEY = 'biometric_enabled';
 
 export default function SettingsScreen() {
   const { user, logout, deleteAccount } = useAuth();
-  const { handleRestore } = useSubscription();
+  const { isSubscribed, handleRestore } = useSubscription();
+  const router = useRouter();
   const [biometricType, setBiometricType] = useState<string | null>(null);
   const [biometricEnabled, setBiometricEnabled] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -89,9 +93,29 @@ export default function SettingsScreen() {
     }
   };
 
+  const handleOpenPrivacyPolicy = () => {
+    hapticLight();
+    Linking.openURL('https://feelsy.app/privacy');
+  };
+
+  const handleOpenTerms = () => {
+    hapticLight();
+    Linking.openURL('https://feelsy.app/terms');
+  };
+
+  const handleNotificationPreferences = () => {
+    hapticLight();
+    Alert.alert('Coming Soon', 'Notification preferences will be available in the next update.');
+  };
+
+  const handleUpgradePremium = () => {
+    hapticMedium();
+    router.push('/(protected)/paywall');
+  };
+
   return (
     <SafeAreaView className="flex-1 bg-white">
-      <View className="flex-1 px-6 pt-8">
+      <ScrollView className="flex-1 px-6 pt-8" showsVerticalScrollIndicator={false}>
         <Text className="mb-8 text-3xl font-bold text-gray-900">Settings</Text>
 
         {/* Account Section */}
@@ -134,11 +158,50 @@ export default function SettingsScreen() {
           </Pressable>
         </View>
 
+        {/* Notifications Section */}
+        <Text className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-400">
+          Notifications
+        </Text>
+        <View className="mb-6 rounded-xl bg-gray-50">
+          <Pressable className="p-4" onPress={handleNotificationPreferences}>
+            <View className="flex-row items-center justify-between">
+              <Text className="text-base font-medium text-gray-900">
+                Notification Preferences
+              </Text>
+              <Ionicons name="chevron-forward" size={18} color="#9ca3af" />
+            </View>
+          </Pressable>
+        </View>
+
         {/* Purchases Section (Guideline 3.1) */}
         <Text className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-400">
           Purchases
         </Text>
         <View className="mb-6 rounded-xl bg-gray-50">
+          {isSubscribed ? (
+            <View className="flex-row items-center justify-between border-b border-gray-200 p-4">
+              <Text className="text-base font-medium text-gray-900">
+                Subscription
+              </Text>
+              <Text className="text-base font-medium text-green-600">
+                Premium Active ✓
+              </Text>
+            </View>
+          ) : (
+            <Pressable className="border-b border-gray-200 p-4" onPress={handleUpgradePremium}>
+              <View className="flex-row items-center justify-between">
+                <Text className="text-base font-medium text-gray-900">
+                  Subscription
+                </Text>
+                <View className="flex-row items-center">
+                  <Text className="text-base font-medium text-primary-600 mr-1">
+                    Upgrade to Premium
+                  </Text>
+                  <Ionicons name="chevron-forward" size={18} color="#8b5cf6" />
+                </View>
+              </View>
+            </Pressable>
+          )}
           <Pressable className="p-4" onPress={handleRestorePurchases}>
             <Text className="text-base font-medium text-primary-600">
               Restore Purchases
@@ -146,11 +209,42 @@ export default function SettingsScreen() {
           </Pressable>
         </View>
 
+        {/* About Section (Guideline 5.1 — Privacy Policy) */}
+        <Text className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-400">
+          About
+        </Text>
+        <View className="mb-6 rounded-xl bg-gray-50">
+          <Pressable className="border-b border-gray-200 p-4" onPress={handleOpenPrivacyPolicy}>
+            <View className="flex-row items-center justify-between">
+              <Text className="text-base font-medium text-gray-900">
+                Privacy Policy
+              </Text>
+              <Ionicons name="chevron-forward" size={18} color="#9ca3af" />
+            </View>
+          </Pressable>
+          <Pressable className="border-b border-gray-200 p-4" onPress={handleOpenTerms}>
+            <View className="flex-row items-center justify-between">
+              <Text className="text-base font-medium text-gray-900">
+                Terms of Service
+              </Text>
+              <Ionicons name="chevron-forward" size={18} color="#9ca3af" />
+            </View>
+          </Pressable>
+          <View className="flex-row items-center justify-between p-4">
+            <Text className="text-base font-medium text-gray-900">
+              Version
+            </Text>
+            <Text className="text-base text-gray-500">
+              {Constants.expoConfig?.version || '1.0.0'}
+            </Text>
+          </View>
+        </View>
+
         {/* Danger Zone — Account Deletion (Guideline 5.1.1) */}
         <Text className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-400">
           Danger Zone
         </Text>
-        <View className="rounded-xl bg-red-50">
+        <View className="mb-8 rounded-xl bg-red-50">
           <Pressable className="p-4" onPress={confirmDelete}>
             <Text className="text-base font-medium text-red-600">
               Delete Account
@@ -160,7 +254,7 @@ export default function SettingsScreen() {
             </Text>
           </Pressable>
         </View>
-      </View>
+      </ScrollView>
 
       {/* Delete Account Confirmation Modal */}
       <Modal
