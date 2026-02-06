@@ -40,7 +40,7 @@
       "id": "enhance_004",
       "title": "Build friends management screen with add/accept/remove friend flows",
       "description": "The current friends.tsx only shows friend feels and vibes but has NO way to add friends, accept requests, or manage the friend list. This makes the entire social feature unusable since users can never establish friend connections.\n\nModify file: mobile/app/(protected)/friends.tsx — Complete rewrite with three sections:\n\n1. Add Friend Section (top of screen, always visible):\n- TextInput for friend email with rounded-xl bg-gray-100 px-4 py-3 styling\n- Button title='Add Friend' variant='primary' size='sm' next to input in flex-row\n- State: friendEmail string, isAdding boolean\n- Handler: addFriend() calls api.post('/feels/friends', { friend_email: friendEmail }), hapticSuccess on success, clear input, reload data\n\n2. Pending Requests Section (collapsible):\n- Header 'Friend Requests' with count badge (bg-primary-100 text-primary-700 rounded-full px-2)\n- Fetch from api.get('/feels/friends/requests')\n- Each request card: View className='mx-4 mb-3 rounded-2xl bg-white p-4 shadow-sm' showing requester email\n- Two buttons per card: 'Accept' (bg-green-500 text-white rounded-lg px-4 py-2) calls api.put(`/feels/friends/${id}/accept`), 'Decline' (bg-gray-200 text-gray-700) calls api.delete(`/feels/friends/${id}/reject`)\n- hapticSuccess on accept, hapticSelection on decline\n\n3. Friends \u0026 Vibes Section (existing functionality enhanced):\n- Keep existing friends feels list (renderFriend) but add long-press to remove: onLongPress =\u003e Alert.alert('Remove Friend', 'Remove this friend?', [{Cancel}, {Remove, destructive, onPress: api.delete(`/feels/friends/${friend.user_id}`)}])\n- Keep existing vibes section and vibe modal\n\n4. State additions: requests (FriendRequest[]), friendsList (Friend[]), friendEmail string, isAdding boolean\n5. Add type interfaces at top: interface FriendRequest { id: string; user_id: string; friend_email: string; created_at: string; }\n6. loadData() now calls 3 endpoints in Promise.all: /feels/friends, /feels/vibes?limit=20, /feels/friends/requests\n7. Empty state when no friends AND no requests: View with emoji '👋', text 'Add friends by email to share vibes!'",
-      "status": "in_progress",
+      "status": "completed",
       "priority": 7,
       "depends_on": [
         "enhance_001"
@@ -48,7 +48,7 @@
       "test_command": "cd mobile \u0026\u0026 npx tsc --noEmit",
       "auto_commit": true,
       "created_at": "",
-      "updated_at": "2026-02-06T18:59:48Z"
+      "updated_at": "2026-02-06T19:04:35Z"
     },
     {
       "id": "enhance_005",
@@ -66,7 +66,7 @@
       "id": "enhance_006",
       "title": "Add mood insights screen with weekly trends and personalized messages",
       "description": "Create a new Insights tab screen that displays the weekly mood analysis from the backend insights endpoint. This replaces the basic stats display with meaningful emotional intelligence.\n\nCreate file: mobile/app/(protected)/insights.tsx:\n\nImports: React, useState, useEffect, useCallback from 'react'; View, Text, ScrollView, RefreshControl from 'react-native'; SafeAreaView from 'react-native-safe-area-context'; api from '../../lib/api'; getColorForScore, getFeelLabel from '../../types/feel';\n\nInterface WeeklyInsight { week_start: string; week_end: string; average_mood: number; average_energy: number; average_feel: number; total_checkins: number; best_day: string; worst_day: string; mood_trend: string; dominant_emoji: string; }\nInterface InsightsData { current_week: WeeklyInsight; previous_week: WeeklyInsight; improvement: number; message: string; }\n\nComponent structure:\n- State: insights (InsightsData | null), isLoading, isRefreshing\n- loadInsights() calls api.get('/feels/insights'), sets state\n- useEffect calls loadInsights on mount\n- ScrollView with RefreshControl\n\nJSX layout:\n- Header: 'Insights' text-3xl font-bold, 'Your weekly mood trends' text-base text-gray-500\n- Personalized Message Card: rounded-3xl p-6 shadow-sm, background uses getColorForScore(insights.current_week.average_feel) + '15'. Shows dominant_emoji as text-5xl, insights.message as text-lg font-medium text-gray-800\n- Trend indicator: View with arrow icon (▲ improving green, ▼ declining red, ● stable gray) + improvement percentage text\n- This Week Stats: 3-column grid (rounded-2xl bg-white p-4 shadow-sm each): Mood avg, Energy avg, Feel avg — each shows number in text-2xl font-bold with color from getColorForScore\n- Comparison Section: 'vs Last Week' header, show previous_week averages in smaller text-lg, with +/- difference indicators colored green/red\n- Best/Worst Day: Two side-by-side cards. Best: green-tinted bg, emoji '🌟', date formatted. Worst: orange-tinted bg, emoji '💪', date formatted with encouraging text 'You got through it!'\n- Check-in count: 'X of 7 days tracked' with progress bar (View h-2 rounded-full bg-gray-200 with inner View width percentage)\n\nModify file: mobile/app/(protected)/_layout.tsx — Add Insights tab:\n- Add new Tabs.Screen between 'history' and 'friends':\n  \u003cTabs.Screen name='insights' options={{ title: 'Insights', tabBarIcon: ({ color, size }) =\u003e \u003cIonicons name='analytics-outline' size={size} color={color} /\u003e }} /\u003e",
-      "status": "pending",
+      "status": "in_progress",
       "priority": 7,
       "depends_on": [
         "enhance_005"
@@ -74,7 +74,7 @@
       "test_command": "cd mobile \u0026\u0026 npx tsc --noEmit",
       "auto_commit": true,
       "created_at": "",
-      "updated_at": ""
+      "updated_at": "2026-02-06T19:04:35Z"
     },
     {
       "id": "enhance_007",
