@@ -55,3 +55,26 @@ type FriendRequestResponse struct {
 type AcceptFriendRequestRequest struct {
 	RequestID string `json:"request_id" validate:"required,uuid"`
 }
+
+// WeeklyInsight represents mood data aggregated for a single week
+type WeeklyInsight struct {
+	WeekStart     string  `json:"week_start"`
+	WeekEnd       string  `json:"week_end"`
+	AverageMood   float64 `json:"average_mood"`
+	AverageEnergy float64 `json:"average_energy"`
+	AverageFeel   float64 `json:"average_feel"`
+	TotalCheckIns int     `json:"total_checkins"`
+	BestDay       string  `json:"best_day"`
+	WorstDay      string  `json:"worst_day"`
+	MoodTrend     string  `json:"mood_trend"`
+	DominantEmoji string  `json:"dominant_emoji"`
+	StreakAtEnd   int     `json:"streak_at_end"`
+}
+
+// InsightsResponse represents the weekly insights API response
+type InsightsResponse struct {
+	CurrentWeek  WeeklyInsight `json:"current_week"`
+	PreviousWeek WeeklyInsight `json:"previous_week"`
+	Improvement  float64       `json:"improvement"`
+	Message      string        `json:"message"`
+}

@@ -16,13 +16,13 @@
       "id": "enhance_002",
       "title": "Fix restore purchases mock and biometric persistence in settings",
       "description": "CRITICAL MOCK DETECTED: In mobile/app/(protected)/settings.tsx lines 62-67, handleRestorePurchases is a STUB that just shows Alert.alert('Restore Purchases', 'Checking for previous purchases...') instead of actually calling RevenueCat. This WILL cause App Store rejection under Guideline 3.1.\n\nAlso: The biometric toggle (biometricEnabled state on line 14) is local React state that resets on every app launch — it's never persisted to SecureStore.\n\nModify file: mobile/app/(protected)/settings.tsx:\n\n1. Fix Restore Purchases (replace lines 62-67):\n- Import useSubscription from '../../contexts/SubscriptionContext'\n- Destructure { handleRestore } from useSubscription()\n- Replace handleRestorePurchases with async function that calls handleRestore(), shows success/failure Alert, and triggers hapticSuccess or hapticError accordingly:\n  const handleRestorePurchases = async () =\u003e {\n    hapticMedium();\n    try {\n      const success = await handleRestore();\n      if (success) {\n        hapticSuccess();\n        Alert.alert('Restored', 'Your purchases have been restored!');\n      } else {\n        Alert.alert('Not Found', 'No previous purchases found.');\n      }\n    } catch { Alert.alert('Error', 'Failed to restore purchases.'); }\n  };\n- Import hapticSuccess from haptics (add to existing import)\n\n2. Fix Biometric Persistence:\n- Import * as SecureStore from 'expo-secure-store' at top\n- Add BIOMETRIC_KEY constant = 'biometric_enabled'\n- In useEffect, after checking biometric availability, also load: const saved = await SecureStore.getItemAsync(BIOMETRIC_KEY); if (saved === 'true') setBiometricEnabled(true);\n- Replace direct setBiometricEnabled on Switch onValueChange with: const toggleBiometric = async (val: boolean) =\u003e { setBiometricEnabled(val); await SecureStore.setItemAsync(BIOMETRIC_KEY, val ? 'true' : 'false'); }\n- Update Switch onValueChange={toggleBiometric}\n- Change Switch trackColor true value from '#2563eb' to '#8b5cf6' to match app's purple theme used in protected layout",
-      "status": "in_progress",
+      "status": "completed",
       "priority": 9,
       "depends_on": [],
       "test_command": "cd mobile \u0026\u0026 npx tsc --noEmit",
       "auto_commit": true,
       "created_at": "",
-      "updated_at": "2026-02-06T18:42:04Z"
+      "updated_at": "2026-02-06T18:46:46Z"
     },
     {
       "id": "enhance_003",
@@ -54,13 +54,13 @@
       "id": "enhance_005",
       "title": "Add weekly mood insights endpoint with trend analysis",
       "description": "The app tracks daily moods but provides NO insights or trend analysis. Users only see raw history and basic stats (streak, total, average). Adding a weekly insights endpoint gives users meaningful patterns about their emotional wellbeing, which is the core value proposition of a mood tracking app.\n\nModify file: backend/internal/dto/feel_dto.go — Add new DTOs:\n- WeeklyInsight struct: week_start string, week_end string, average_mood float64, average_energy float64, average_feel float64, total_checkins int, best_day string (date with highest feel_score), worst_day string, mood_trend string (\"improving\"/\"declining\"/\"stable\"), dominant_emoji string (most used emoji that week), streak_at_end int\n- InsightsResponse struct: current_week WeeklyInsight, previous_week WeeklyInsight, improvement float64 (percentage change), message string (personalized insight text)\n\nModify file: backend/internal/services/feel_service.go — Add method:\n- GetWeeklyInsights(userID uuid.UUID) (*dto.InsightsResponse, error):\n  - Calculate current week (Monday to now) and previous week date ranges using time.Now() and Truncate\n  - Query FeelCheck WHERE user_id = ? AND check_date BETWEEN ? AND ? for both weeks\n  - Calculate averages for mood_score, energy_score, feel_score\n  - Find best/worst days by sorting check results\n  - Determine mood_trend: compare current week avg to previous week avg. \u003e5% = improving, \u003c-5% = declining, else stable\n  - Find dominant_emoji: count occurrences of each mood_emoji, return most frequent\n  - Calculate improvement percentage: ((current_avg - previous_avg) / previous_avg) * 100\n  - Generate personalized message based on trend: improving -\u003e \"Great progress! Your mood has improved by X% this week.\", declining -\u003e \"Hang in there! Consider activities that boosted your mood on {best_day}.\", stable -\u003e \"Consistent week! Your average feel score is {avg}.\"\n  - Return InsightsResponse with both weeks and message\n\nModify file: backend/internal/handlers/feel_handler.go — Add handler:\n- GetWeeklyInsights(c *fiber.Ctx) — extract userID from JWT, call service.GetWeeklyInsights, return JSON\n\nModify file: backend/internal/routes/routes.go — Add route:\n- feels.Get(\"/insights\", feelHandler.GetWeeklyInsights) after existing feels routes",
-      "status": "pending",
+      "status": "in_progress",
       "priority": 9,
       "depends_on": [],
       "test_command": "cd backend \u0026\u0026 go build ./...",
       "auto_commit": true,
       "created_at": "",
-      "updated_at": ""
+      "updated_at": "2026-02-06T18:46:46Z"
     },
     {
       "id": "enhance_006",

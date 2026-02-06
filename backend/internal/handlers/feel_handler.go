@@ -331,3 +331,20 @@ func (h *FeelHandler) RemoveFriend(c *fiber.Ctx) error {
 		"message": "Friend removed",
 	})
 }
+
+// GetWeeklyInsights handles GET /api/feels/insights
+func (h *FeelHandler) GetWeeklyInsights(c *fiber.Ctx) error {
+	userToken := c.Locals("user").(*jwt.Token)
+	claims := userToken.Claims.(jwt.MapClaims)
+	userID, _ := uuid.Parse(claims["sub"].(string))
+
+	insights, err := h.service.GetWeeklyInsights(userID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":   true,
+			"message": "Failed to fetch weekly insights",
+		})
+	}
+
+	return c.JSON(insights)
+}

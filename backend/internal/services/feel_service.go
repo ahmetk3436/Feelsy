@@ -2,8 +2,11 @@ package services
 
 import (
 	"errors"
+	"fmt"
+	"math"
 	"time"
 
+	"github.com/ahmetcoskunkizilkaya/feelsy/backend/internal/dto"
 	"github.com/ahmetcoskunkizilkaya/feelsy/backend/internal/models"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -451,4 +454,152 @@ func (s *FeelService) RemoveFriend(userID, friendshipID uuid.UUID) error {
 	}
 
 	return s.db.Delete(&friendship).Error
+}
+
+// GetWeeklyInsights returns mood trend analysis comparing current and previous week
+func (s *FeelService) GetWeeklyInsights(userID uuid.UUID) (*dto.InsightsResponse, error) {
+	now := time.Now()
+
+	// Calculate current week start (Monday) and end (today)
+	weekday := now.Weekday()
+	if weekday == time.Sunday {
+		weekday = 7
+	}
+	daysSinceMonday := int(weekday) - 1
+	currentWeekStart := now.AddDate(0, 0, -daysSinceMonday).Truncate(24 * time.Hour)
+	currentWeekEnd := now.Truncate(24 * time.Hour)
+
+	// Previous week is the 7 days before current week start
+	previousWeekStart := currentWeekStart.AddDate(0, 0, -7)
+	previousWeekEnd := currentWeekStart.AddDate(0, 0, -1)
+
+	// Query current week check-ins
+	var currentChecks []models.FeelCheck
+	if err := s.db.Where("user_id = ? AND check_date >= ? AND check_date <= ?", userID, currentWeekStart, currentWeekEnd).
+		Order("check_date ASC").
+		Find(&currentChecks).Error; err != nil {
+		return nil, err
+	}
+
+	// Query previous week check-ins
+	var previousChecks []models.FeelCheck
+	if err := s.db.Where("user_id = ? AND check_date >= ? AND check_date <= ?", userID, previousWeekStart, previousWeekEnd).
+		Order("check_date ASC").
+		Find(&previousChecks).Error; err != nil {
+		return nil, err
+	}
+
+	// Build current week insight
+	currentInsight := s.buildWeeklyInsight(currentChecks, currentWeekStart, currentWeekEnd)
+
+	// Build previous week insight
+	previousInsight := s.buildWeeklyInsight(previousChecks, previousWeekStart, previousWeekEnd)
+
+	// Get current streak
+	var streak models.FeelStreak
+	if err := s.db.Where("user_id = ?", userID).First(&streak).Error; err == nil {
+		currentInsight.StreakAtEnd = streak.CurrentStreak
+	}
+
+	// Calculate improvement percentage
+	var improvement float64
+	if previousInsight.AverageFeel > 0 {
+		improvement = ((currentInsight.AverageFeel - previousInsight.AverageFeel) / previousInsight.AverageFeel) * 100
+		improvement = math.Round(improvement*100) / 100
+	}
+
+	// Determine mood trend
+	if previousInsight.AverageFeel > 0 {
+		diff := ((currentInsight.AverageFeel - previousInsight.AverageFeel) / previousInsight.AverageFeel) * 100
+		if diff > 5 {
+			currentInsight.MoodTrend = "improving"
+		} else if diff < -5 {
+			currentInsight.MoodTrend = "declining"
+		} else {
+			currentInsight.MoodTrend = "stable"
+		}
+	} else {
+		currentInsight.MoodTrend = "stable"
+	}
+
+	// Generate personalized message
+	var message string
+	switch currentInsight.MoodTrend {
+	case "improving":
+		message = fmt.Sprintf("Great progress! Your mood has improved by %.1f%% this week.", math.Abs(improvement))
+	case "declining":
+		if currentInsight.BestDay != "" {
+			message = fmt.Sprintf("Hang in there! Consider activities that boosted your mood on %s.", currentInsight.BestDay)
+		} else {
+			message = "Hang in there! Try to check in daily to track your progress."
+		}
+	default:
+		if currentInsight.AverageFeel > 0 {
+			message = fmt.Sprintf("Consistent week! Your average feel score is %.1f.", currentInsight.AverageFeel)
+		} else {
+			message = "Start checking in to see your weekly mood insights!"
+		}
+	}
+
+	return &dto.InsightsResponse{
+		CurrentWeek:  currentInsight,
+		PreviousWeek: previousInsight,
+		Improvement:  improvement,
+		Message:      message,
+	}, nil
+}
+
+// buildWeeklyInsight aggregates a slice of FeelCheck records into a WeeklyInsight
+func (s *FeelService) buildWeeklyInsight(checks []models.FeelCheck, weekStart, weekEnd time.Time) dto.WeeklyInsight {
+	insight := dto.WeeklyInsight{
+		WeekStart: weekStart.Format("2006-01-02"),
+		WeekEnd:   weekEnd.Format("2006-01-02"),
+	}
+
+	if len(checks) == 0 {
+		return insight
+	}
+
+	var totalMood, totalEnergy, totalFeel float64
+	var bestCheck, worstCheck models.FeelCheck
+	emojiCount := make(map[string]int)
+
+	bestCheck = checks[0]
+	worstCheck = checks[0]
+
+	for _, check := range checks {
+		totalMood += float64(check.MoodScore)
+		totalEnergy += float64(check.EnergyScore)
+		totalFeel += float64(check.FeelScore)
+
+		if check.FeelScore > bestCheck.FeelScore {
+			bestCheck = check
+		}
+		if check.FeelScore < worstCheck.FeelScore {
+			worstCheck = check
+		}
+
+		if check.MoodEmoji != "" {
+			emojiCount[check.MoodEmoji]++
+		}
+	}
+
+	count := float64(len(checks))
+	insight.AverageMood = math.Round((totalMood/count)*100) / 100
+	insight.AverageEnergy = math.Round((totalEnergy/count)*100) / 100
+	insight.AverageFeel = math.Round((totalFeel/count)*100) / 100
+	insight.TotalCheckIns = len(checks)
+	insight.BestDay = bestCheck.CheckDate.Format("2006-01-02")
+	insight.WorstDay = worstCheck.CheckDate.Format("2006-01-02")
+
+	// Find dominant emoji
+	var maxCount int
+	for emoji, c := range emojiCount {
+		if c > maxCount {
+			maxCount = c
+			insight.DominantEmoji = emoji
+		}
+	}
+
+	return insight
 }

@@ -44,6 +44,7 @@ func Setup(
 	feels.Get("/today", feelHandler.GetTodayCheck)      // Get today's check-in
 	feels.Get("/history", feelHandler.GetFeelHistory)   // Get check-in history
 	feels.Get("/stats", feelHandler.GetFeelStats)       // Get stats & streaks
+	feels.Get("/insights", feelHandler.GetWeeklyInsights) // Get weekly mood insights
 	feels.Post("/vibe", feelHandler.SendGoodVibe)       // Send good vibes to friend
 	feels.Get("/vibes", feelHandler.GetReceivedVibes)   // Get received vibes
 	feels.Get("/friends", feelHandler.GetFriendFeels)   // Get friend feels today
