@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, KeyboardAvoidingView, Platform, Pressable } from 'react-native';
+import { View, Text, KeyboardAvoidingView, Platform, Pressable, Alert } from 'react-native';
 import { Link, useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import { useAuth } from '../../contexts/AuthContext';
@@ -48,11 +48,15 @@ export default function LoginScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <View className="flex-1 justify-center px-8">
+        <View className="items-center mb-6">
+          <Text className="text-6xl">💜</Text>
+          <Text className="text-2xl font-bold text-primary-600">Feelsy</Text>
+        </View>
         <Text className="mb-2 text-3xl font-bold text-gray-900">
           Welcome back
         </Text>
         <Text className="mb-8 text-base text-gray-500">
-          Sign in to your account
+          Check in with your feelings
         </Text>
 
         {error ? (
@@ -83,6 +87,20 @@ export default function LoginScreen() {
             textContentType="password"
           />
         </View>
+
+        <Pressable
+          onPress={() => {
+            hapticLight();
+            Alert.alert(
+              'Reset Password',
+              'Contact support@feelsy.app to reset your password.'
+            );
+          }}
+        >
+          <Text className="text-right text-sm text-primary-600 mb-4">
+            Forgot Password?
+          </Text>
+        </Pressable>
 
         <Button
           title="Sign In"

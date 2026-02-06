@@ -49,11 +49,15 @@ export default function RegisterScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <View className="flex-1 justify-center px-8">
+        <View className="items-center mb-6">
+          <Text className="text-6xl">💜</Text>
+          <Text className="text-2xl font-bold text-primary-600">Feelsy</Text>
+        </View>
         <Text className="mb-2 text-3xl font-bold text-gray-900">
-          Create account
+          Join Feelsy
         </Text>
         <Text className="mb-8 text-base text-gray-500">
-          Start building something great
+          Start tracking your daily moods and vibes
         </Text>
 
         {error ? (
