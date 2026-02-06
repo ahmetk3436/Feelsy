@@ -1,654 +1,864 @@
-# Implementation Plan: Add Share Result Card with Gradient Background After Check-In
+# Implementation Plan: Add History Screen Date Grouping and Enhanced Card Design
 
 ## Overview
-Modify the home screen (`mobile/app/(protected)/home.tsx`) to enhance the post-check-in result card with a richer visual design (colored top banner, completion badge, streak info, border accent) and upgrade the share functionality from plain text to a formatted card-style text share with emoji bars. Also add an auto-share prompt 800ms after successful check-in.
+Modify the history screen (`mobile/app/(protected)/history.tsx`) to replace the flat FlatList with a SectionList grouped by month, add a mini weekly chart at the top, add score filter chips, and enhance individual card design with colored borders, shadows, time display, and styled note quotes. Also update the `FeelCheck` TypeScript interface to include the `created_at` field that the backend already sends.
 
-**Files to modify:** 1 file only — `mobile/app/(protected)/home.tsx`
+**Files to modify:** 2 files
+1. `mobile/types/feel.ts` — add `created_at` field to FeelCheck interface
+2. `mobile/app/(protected)/history.tsx` — complete rewrite of history screen
+
 **No new files.** No new packages. No backend changes.
 
 ---
 
-## File 1: MODIFY `mobile/app/(protected)/home.tsx`
+## File 1: MODIFY `mobile/types/feel.ts`
 
 ### FILE PURPOSE
-Main home screen that shows the daily check-in form (when no check-in exists) or the result card (after check-in), plus stats and badges.
+Defines TypeScript interfaces for feel check-ins, stats, friends, and vibes, plus helper functions for score-to-color and score-to-label mapping.
 
-### IMPORTS (full list — line 1-8 of the current file)
+### EXACT CHANGE
+Add `created_at` optional field to the `FeelCheck` interface. The backend Go model (`backend/internal/models/feel_check.go` line 21) sends `created_at` as a JSON field, but the frontend interface currently lacks it.
 
-Replace the existing import block (lines 1-8) with the following. The ONLY change is adding `Alert` to the react-native import on line 2:
-
+**Current code (lines 1-10):**
 ```typescript
-import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, Pressable, Share, TextInput, Alert } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useAuth } from '../../contexts/AuthContext';
-import Button from '../../components/ui/Button';
-import api from '../../lib/api';
-import { hapticSuccess, hapticSelection, hapticMedium } from '../../lib/haptics';
-import { FeelCheck, FeelStats, MOOD_EMOJIS, getColorForScore, getFeelLabel } from '../../types/feel';
-```
-
-**What changed:** Added `Alert` to the `react-native` import on line 2. All other imports stay identical.
-
----
-
-### STATE VARIABLES (no changes)
-
-All existing state hooks remain exactly as they are (lines 11-21):
-```typescript
-const { user } = useAuth();
-const [todayCheck, setTodayCheck] = useState<FeelCheck | null>(null);
-const [stats, setStats] = useState<FeelStats | null>(null);
-const [isLoading, setIsLoading] = useState(false);
-const [showCheckin, setShowCheckin] = useState(false);
-const [moodScore, setMoodScore] = useState(50);
-const [energyScore, setEnergyScore] = useState(50);
-const [selectedEmoji, setSelectedEmoji] = useState('😊');
-const [note, setNote] = useState('');
-```
-
-No new state variables are needed.
-
----
-
-### FUNCTION CHANGES
-
-#### Change 1: Replace `handleShare` function (lines 60-70)
-
-**Current code (to be replaced):**
-```typescript
-  const handleShare = async () => {
-    if (!todayCheck) return;
-    hapticMedium();
-    try {
-      await Share.share({
-        message: `${selectedEmoji} My Feelsy Score: ${todayCheck.feel_score}/100 - ${getFeelLabel(todayCheck.feel_score)}!\n\nTrack your daily vibes with Feelsy`,
-      });
-    } catch (error) {
-      console.log('Share error:', error);
-    }
-  };
+export interface FeelCheck {
+  id: string;
+  mood_score: number;
+  energy_score: number;
+  feel_score: number;
+  mood_emoji: string;
+  note: string;
+  color_hex: string;
+  check_date: string;
+}
 ```
 
 **New code (exact replacement):**
 ```typescript
-  const handleShare = async () => {
-    if (!todayCheck) return;
-    hapticMedium();
-    try {
-      const label = getFeelLabel(todayCheck.feel_score);
-      const filled = Math.floor(todayCheck.feel_score / 10);
-      const bar = '█'.repeat(filled) + '░'.repeat(10 - filled);
-      const message = `${todayCheck.mood_emoji} My Feelsy Check-In\n\n` +
-        `Score: ${todayCheck.feel_score}/100 — ${label}\n` +
-        `${bar}\n\n` +
-        `Mood: ${todayCheck.mood_score} | Energy: ${todayCheck.energy_score}\n` +
-        (todayCheck.note ? `"${todayCheck.note}"\n\n` : '\n') +
-        `🔥 ${stats?.current_streak || 0} day streak\n\n` +
-        `Track your vibes → Feelsy App`;
-      await Share.share({ message });
-    } catch (error) {
-      console.log('Share error:', error);
-    }
-  };
+export interface FeelCheck {
+  id: string;
+  mood_score: number;
+  energy_score: number;
+  feel_score: number;
+  mood_emoji: string;
+  note: string;
+  color_hex: string;
+  check_date: string;
+  created_at?: string;
+}
 ```
 
-**What changed:**
-- Uses `todayCheck.mood_emoji` instead of `selectedEmoji` (selectedEmoji is local form state; todayCheck.mood_emoji is the saved value)
-- Computes `label` via `getFeelLabel(todayCheck.feel_score)`
-- Computes `filled` = `Math.floor(todayCheck.feel_score / 10)` — integer from 0 to 10
-- Builds `bar` = filled `█` chars + remaining `░` chars (always 10 chars total)
-- Multi-line message includes: emoji + title, score + label, visual bar, mood + energy breakdown, optional quoted note, streak count, call-to-action
-- The `stats?.current_streak || 0` safely handles null stats
+**What changed:** Added `created_at?: string;` as an optional field (line 10, before the closing brace). It's optional (`?`) because older cached data may not have it. The backend sends ISO 8601 timestamps like `"2026-02-06T14:30:00Z"`.
 
-#### Change 2: Add auto-share prompt in `handleCheckIn` (lines 40-58)
-
-**Current code (lines 49-52 inside handleCheckIn):**
-```typescript
-      setTodayCheck(res.data);
-      setShowCheckin(false);
-      hapticSuccess();
-      loadData();
-```
-
-**New code (exact replacement for those 4 lines):**
-```typescript
-      setTodayCheck(res.data);
-      setShowCheckin(false);
-      hapticSuccess();
-      loadData();
-      setTimeout(() => {
-        Alert.alert(
-          'Share Your Vibes?',
-          'Let your friends know how you are feeling!',
-          [
-            { text: 'Not now', style: 'cancel' },
-            { text: 'Share', onPress: handleShare },
-          ]
-        );
-      }, 800);
-```
-
-**What changed:** Added a `setTimeout` after `loadData()` that shows an `Alert.alert` after 800ms. The alert has two buttons: "Not now" (cancel style, dismisses alert) and "Share" (calls `handleShare`). This prompts users to share immediately after check-in while the experience is fresh.
+**No other changes to this file.** All other interfaces, types, constants, and functions remain identical.
 
 ---
 
-### JSX STRUCTURE CHANGES
+## File 2: MODIFY `mobile/app/(protected)/history.tsx`
 
-#### Change 3: Enhance the result card (lines 88-130)
+### FILE PURPOSE
+History screen that displays all past check-ins with month grouping, weekly mini chart, score filtering, and enhanced card design.
 
-Replace the entire todayCheck truthy branch (lines 88-130) — from the opening `<View className="mt-6 rounded-3xl bg-white p-6 shadow-sm">` to the closing `</View>` before `) : (`.
+### IMPORTS (complete list — replaces lines 1-5)
 
-**Current JSX (lines 88-130):**
-```jsx
-            <View className="mt-6 rounded-3xl bg-white p-6 shadow-sm">
-              <Text className="text-sm font-medium text-gray-500">Today's Feelsy Score</Text>
-              <View className="mt-4 items-center">
-                <View
-                  className="h-32 w-32 items-center justify-center rounded-full"
-                  style={{ backgroundColor: feelColor + '20' }}
-                >
-                  <Text className="text-5xl">{todayCheck.mood_emoji}</Text>
-                </View>
-                <Text className="mt-4 text-5xl font-bold" style={{ color: feelColor }}>
-                  {todayCheck.feel_score}
-                </Text>
-                <Text className="mt-1 text-lg font-medium text-gray-600">
-                  {getFeelLabel(todayCheck.feel_score)}
-                </Text>
-
-                <View className="mt-4 flex-row gap-4">
-                  <View className="items-center">
-                    <Text className="text-sm text-gray-500">Mood</Text>
-                    <Text className="text-lg font-semibold text-gray-900">{todayCheck.mood_score}</Text>
-                  </View>
-                  <View className="h-8 w-px bg-gray-200" />
-                  <View className="items-center">
-                    <Text className="text-sm text-gray-500">Energy</Text>
-                    <Text className="text-lg font-semibold text-gray-900">{todayCheck.energy_score}</Text>
-                  </View>
-                </View>
-
-                {todayCheck.note && (
-                  <Text className="mt-4 text-center text-gray-600 italic">
-                    "{todayCheck.note}"
-                  </Text>
-                )}
-              </View>
-
-              <Button
-                title="Share Your Vibes"
-                variant="outline"
-                onPress={handleShare}
-                size="md"
-              />
-            </View>
+**Current imports:**
+```typescript
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, Text, FlatList, RefreshControl } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import api from '../../lib/api';
+import { FeelCheck, getColorForScore, getFeelLabel } from '../../types/feel';
 ```
 
-**New JSX (exact replacement):**
-```jsx
-            <View
-              className="mt-6 rounded-3xl bg-white p-6 shadow-sm overflow-hidden"
-              style={{ borderWidth: 1, borderColor: feelColor + '40' }}
-            >
-              {/* Colored top banner */}
-              <View
-                className="h-3 rounded-t-3xl -mx-6 -mt-6 mb-4"
-                style={{ backgroundColor: feelColor }}
-              />
-
-              <Text className="text-sm font-medium text-gray-500">Today's Feelsy Score</Text>
-
-              <View className="mt-4 items-center">
-                {/* Daily Check-In Complete badge */}
-                <View className="bg-green-100 px-3 py-1 rounded-full mb-3">
-                  <Text className="text-green-700 text-sm font-medium">Daily Check-In Complete ✓</Text>
-                </View>
-
-                <View
-                  className="h-36 w-36 items-center justify-center rounded-full"
-                  style={{ backgroundColor: feelColor + '20' }}
-                >
-                  <Text className="text-5xl">{todayCheck.mood_emoji}</Text>
-                </View>
-                <Text className="mt-4 text-5xl font-bold" style={{ color: feelColor }}>
-                  {todayCheck.feel_score}
-                </Text>
-                <Text className="mt-1 text-lg font-medium text-gray-600">
-                  {getFeelLabel(todayCheck.feel_score)}
-                </Text>
-
-                <View className="mt-4 flex-row gap-4">
-                  <View className="items-center">
-                    <Text className="text-sm text-gray-500">Mood</Text>
-                    <Text className="text-lg font-semibold text-gray-900">{todayCheck.mood_score}</Text>
-                  </View>
-                  <View className="h-8 w-px bg-gray-200" />
-                  <View className="items-center">
-                    <Text className="text-sm text-gray-500">Energy</Text>
-                    <Text className="text-lg font-semibold text-gray-900">{todayCheck.energy_score}</Text>
-                  </View>
-                </View>
-
-                {/* Streak info */}
-                <View className="mt-3 flex-row items-center">
-                  <Text className="text-sm text-gray-500">🔥 {stats?.current_streak || 0} day streak</Text>
-                </View>
-
-                {todayCheck.note && (
-                  <Text className="mt-4 text-center text-gray-600 italic">
-                    "{todayCheck.note}"
-                  </Text>
-                )}
-              </View>
-
-              <Button
-                title="Share Your Vibes"
-                variant="outline"
-                onPress={handleShare}
-                size="md"
-              />
-            </View>
+**New imports (exact replacement):**
+```typescript
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { View, Text, SectionList, RefreshControl, ScrollView, Pressable } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import api from '../../lib/api';
+import { FeelCheck, getColorForScore, getFeelLabel } from '../../types/feel';
+import { hapticSelection } from '../../lib/haptics';
 ```
 
-**Detailed description of every JSX change (top to bottom):**
+**What changed:**
+- Line 1: Added `useMemo` to the React import
+- Line 2: Replaced `FlatList` with `SectionList`, added `ScrollView` and `Pressable`
+- Line 6 (new): Added `hapticSelection` import from `../../lib/haptics` for filter chip tap feedback
 
-1. **Outer `<View>` — border and overflow:**
-   - Old: `className="mt-6 rounded-3xl bg-white p-6 shadow-sm"`
-   - New: `className="mt-6 rounded-3xl bg-white p-6 shadow-sm overflow-hidden"` plus `style={{ borderWidth: 1, borderColor: feelColor + '40' }}`
-   - Added `overflow-hidden` className so the top banner's negative margins don't bleed outside the rounded corners
-   - Added inline `style` with `borderWidth: 1` and `borderColor` set to `feelColor + '40'` (the feel color at 25% opacity via hex alpha). Examples: if feelColor is `#22c55e`, borderColor becomes `#22c55e40`
+---
 
-2. **New colored top banner (inserted as first child of outer View, before the "Today's Feelsy Score" text):**
+### STATE VARIABLES (complete list)
+
+**Current state (lines 8-13):**
+```typescript
+const [checks, setChecks] = useState<FeelCheck[]>([]);
+const [isLoading, setIsLoading] = useState(true);
+const [isRefreshing, setIsRefreshing] = useState(false);
+const [total, setTotal] = useState(0);
+const [offset, setOffset] = useState(0);
+const limit = 20;
+```
+
+**New state (exact replacement — adds 1 new state variable):**
+```typescript
+const [checks, setChecks] = useState<FeelCheck[]>([]);
+const [isLoading, setIsLoading] = useState(true);
+const [isRefreshing, setIsRefreshing] = useState(false);
+const [total, setTotal] = useState(0);
+const [offset, setOffset] = useState(0);
+const [scoreFilter, setScoreFilter] = useState('all');
+const limit = 20;
+```
+
+**What changed:** Added `const [scoreFilter, setScoreFilter] = useState('all');` — tracks the currently active filter chip. Values: `'all'` | `'great'` | `'good'` | `'low'`.
+
+---
+
+### EXISTING FUNCTIONS (kept unchanged)
+
+The following functions remain exactly as they are with zero modifications:
+
+1. **`useEffect(() => { loadHistory(); }, []);`** — unchanged (line 15-17)
+
+2. **`loadHistory(refresh = false)`** — unchanged (lines 19-36). Still fetches from `/feels/history?limit=${limit}&offset=${newOffset}`, still does pagination logic.
+
+3. **`onRefresh()`** — unchanged (lines 38-42). Still sets refreshing state and calls `loadHistory(true)`.
+
+4. **`formatDate(dateStr: string)`** — unchanged (lines 44-51). Still returns `'Mon, Feb 6'` format.
+
+---
+
+### NEW FUNCTIONS (4 new functions, added after `formatDate`)
+
+#### Function 1: `formatTime(dateStr: string): string`
+
+```typescript
+const formatTime = (dateStr: string): string => {
+  const date = new Date(dateStr);
+  return date.toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  });
+};
+```
+
+**Purpose:** Formats a `created_at` ISO timestamp into a readable time string like `"2:30 PM"`.
+**Parameters:** `dateStr` — ISO 8601 string like `"2026-02-06T14:30:00Z"`
+**Returns:** String like `"2:30 PM"`
+**Used in:** `renderItem` — displayed below the date when `item.created_at` exists.
+
+#### Function 2: `filteredChecks` (useMemo)
+
+```typescript
+const filteredChecks = useMemo(() => {
+  switch (scoreFilter) {
+    case 'great':
+      return checks.filter((c) => c.feel_score >= 80);
+    case 'good':
+      return checks.filter((c) => c.feel_score >= 60);
+    case 'low':
+      return checks.filter((c) => c.feel_score < 40);
+    default:
+      return checks;
+  }
+}, [checks, scoreFilter]);
+```
+
+**Purpose:** Computes the filtered check-in array based on the active `scoreFilter`. Memoized to avoid recalculating on every render.
+**Dependencies:** `[checks, scoreFilter]`
+**Returns:** Filtered `FeelCheck[]` — `'great'` keeps scores >= 80, `'good'` keeps scores >= 60, `'low'` keeps scores < 40, `'all'` returns everything.
+**Used in:** Passed to `groupByMonth()` for the SectionList sections.
+
+#### Function 3: `groupByMonth(data: FeelCheck[]): { title: string; data: FeelCheck[] }[]`
+
+```typescript
+const groupByMonth = (data: FeelCheck[]): { title: string; data: FeelCheck[] }[] => {
+  const groups: Record<string, FeelCheck[]> = {};
+  data.forEach((check) => {
+    const date = new Date(check.check_date);
+    const key = date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(check);
+  });
+  return Object.entries(groups).map(([title, items]) => ({
+    title,
+    data: items,
+  }));
+};
+```
+
+**Purpose:** Groups an array of FeelCheck objects by month-year. Each check's `check_date` field is parsed into a `Date` object, then formatted as `"February 2026"` using `toLocaleDateString('en-US', { month: 'long', year: 'numeric' })`. Checks with the same month-year key are grouped together.
+**Parameters:** `data` — array of `FeelCheck` (already filtered)
+**Returns:** Array of `{ title: string; data: FeelCheck[] }` where `title` is like `"February 2026"` and `data` is the checks in that month. The order is preserved from the input (API returns newest first, so the first group will be the most recent month).
+**Used in:** `SectionList sections={groupByMonth(filteredChecks)}`
+
+#### Function 4: `getWeeklyData(): { day: string; score: number | null; color: string }[]`
+
+```typescript
+const getWeeklyData = (): { day: string; score: number | null; color: string }[] => {
+  const days = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+  const today = new Date();
+  const result: { day: string; score: number | null; color: string }[] = [];
+
+  for (let i = 6; i >= 0; i--) {
+    const date = new Date(today);
+    date.setDate(today.getDate() - i);
+    const dayOfWeek = date.getDay();
+    const dayLabel = days[dayOfWeek === 0 ? 6 : dayOfWeek - 1];
+
+    const dateStr = date.toISOString().split('T')[0];
+    const match = checks.find((c) => c.check_date.startsWith(dateStr));
+
+    result.push({
+      day: dayLabel,
+      score: match ? match.feel_score : null,
+      color: match ? getColorForScore(match.feel_score) : '#d1d5db',
+    });
+  }
+
+  return result;
+};
+```
+
+**Purpose:** Builds an array of 7 entries representing the last 7 days (today and 6 days before), each containing the day label, the feel score (or null if no check-in), and a color.
+**Algorithm:**
+1. Define `days` array: `['M', 'T', 'W', 'T', 'F', 'S', 'S']` — Monday through Sunday
+2. Create `today = new Date()`
+3. Loop `i` from 6 down to 0: create a date that is `i` days before today
+4. Get `dayOfWeek` via `date.getDay()` — Sunday=0, Monday=1, ..., Saturday=6
+5. Map to label: if `dayOfWeek === 0` (Sunday), index 6; else `dayOfWeek - 1` (Monday=index 0, etc.)
+6. Create `dateStr` = the `YYYY-MM-DD` portion of the ISO string (e.g., `"2026-02-06"`)
+7. Search `checks` array for a check whose `check_date` starts with `dateStr`. The `check_date` field from the API is a date string like `"2026-02-06T00:00:00Z"`, so `startsWith(dateStr)` will match.
+8. If match found: `score = match.feel_score`, `color = getColorForScore(match.feel_score)`. If no match: `score = null`, `color = '#d1d5db'` (gray-300).
+**Returns:** Array of exactly 7 objects, ordered from 6 days ago to today.
+**Used in:** The weekly mini chart section in `ListHeaderComponent`.
+
+---
+
+### RENDER FUNCTIONS
+
+#### `renderSectionHeader` — NEW function
+
+```typescript
+const renderSectionHeader = ({ section }: { section: { title: string; data: FeelCheck[] } }) => (
+  <View className="px-4 pt-6 pb-2">
+    <Text className="text-lg font-bold text-gray-900">{section.title}</Text>
+    <Text className="text-sm text-gray-500">
+      {section.data.length} check-in{section.data.length !== 1 ? 's' : ''}
+    </Text>
+  </View>
+);
+```
+
+**Purpose:** Renders the sticky section header for each month group in the SectionList.
+**Parameters:** Receives `section` with `title` (e.g., `"February 2026"`) and `data` (array of checks in that month).
+**JSX Structure:**
+- `View className="px-4 pt-6 pb-2"` — container with horizontal padding 16px, top padding 24px, bottom padding 8px
+  - `Text className="text-lg font-bold text-gray-900"` — month title like "February 2026" in 18px bold dark text
+  - `Text className="text-sm text-gray-500"` — count like "5 check-ins" in 14px gray text. Uses conditional pluralization: `check-in` if count is 1, `check-ins` otherwise.
+
+#### `renderItem` — MODIFIED function (replaces lines 53-89)
+
+**Current renderItem (lines 53-89):**
+```typescript
+const renderItem = ({ item }: { item: FeelCheck }) => {
+  const color = getColorForScore(item.feel_score);
+  return (
+    <View className="mx-4 mb-3 rounded-2xl bg-white p-4 shadow-sm">
+      <View className="flex-row items-center justify-between">
+        <View className="flex-row items-center">
+          <View
+            className="h-14 w-14 items-center justify-center rounded-full"
+            style={{ backgroundColor: color + '20' }}
+          >
+            <Text className="text-2xl">{item.mood_emoji || '😊'}</Text>
+          </View>
+          <View className="ml-3">
+            <Text className="text-lg font-semibold text-gray-900">
+              {getFeelLabel(item.feel_score)}
+            </Text>
+            <Text className="text-sm text-gray-500">
+              {formatDate(item.check_date)}
+            </Text>
+          </View>
+        </View>
+        <View className="items-end">
+          <Text className="text-2xl font-bold" style={{ color }}>
+            {item.feel_score}
+          </Text>
+          <View className="flex-row gap-2 mt-1">
+            <Text className="text-xs text-gray-400">M:{item.mood_score}</Text>
+            <Text className="text-xs text-gray-400">E:{item.energy_score}</Text>
+          </View>
+        </View>
+      </View>
+      {item.note && (
+        <Text className="mt-3 text-gray-600 italic">"{item.note}"</Text>
+      )}
+    </View>
+  );
+};
+```
+
+**New renderItem (exact replacement):**
+```typescript
+const renderItem = ({ item }: { item: FeelCheck }) => {
+  const color = getColorForScore(item.feel_score);
+  return (
+    <View
+      className="mx-4 mb-3 rounded-2xl bg-white p-4 shadow-sm"
+      style={{ borderLeftWidth: 4, borderLeftColor: color }}
+    >
+      <View className="flex-row items-center justify-between">
+        <View className="flex-row items-center">
+          <View
+            className="h-16 w-16 items-center justify-center rounded-full"
+            style={{
+              backgroundColor: color + '20',
+              shadowColor: color,
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.2,
+              shadowRadius: 4,
+            }}
+          >
+            <Text className="text-2xl">{item.mood_emoji || '😊'}</Text>
+          </View>
+          <View className="ml-3">
+            <Text className="text-lg font-semibold text-gray-900">
+              {getFeelLabel(item.feel_score)}
+            </Text>
+            <Text className="text-sm text-gray-500">
+              {formatDate(item.check_date)}
+            </Text>
+            {item.created_at && (
+              <Text className="text-xs text-gray-400">
+                {formatTime(item.created_at)}
+              </Text>
+            )}
+          </View>
+        </View>
+        <View className="items-end">
+          <Text className="text-2xl font-bold" style={{ color }}>
+            {item.feel_score}
+          </Text>
+          <View className="flex-row gap-2 mt-1">
+            <Text className="text-xs text-gray-400">M:{item.mood_score}</Text>
+            <Text className="text-xs text-gray-400">E:{item.energy_score}</Text>
+          </View>
+        </View>
+      </View>
+      {item.note && (
+        <View className="mt-3 pl-3" style={{ borderLeftWidth: 2, borderLeftColor: '#e5e7eb' }}>
+          <Text className="text-gray-600 italic">"{item.note}"</Text>
+        </View>
+      )}
+    </View>
+  );
+};
+```
+
+**What changed (5 modifications):**
+
+1. **Colored left border on card** — Added `style={{ borderLeftWidth: 4, borderLeftColor: color }}` to the outer card View. This creates a 4px colored left accent that matches the feel score color (green for high, red for low, etc.).
+
+2. **Larger emoji circle** — Changed `className="h-14 w-14"` to `className="h-16 w-16"` (56px → 64px).
+
+3. **Shadow on emoji circle** — Added shadow style properties to the emoji circle View's `style` prop. The existing `backgroundColor: color + '20'` is kept, and the following are added:
+   - `shadowColor: color` — shadow color matches the feel score color
+   - `shadowOffset: { width: 0, height: 2 }` — shadow drops 2px below
+   - `shadowOpacity: 0.2` — 20% opacity shadow
+   - `shadowRadius: 4` — 4px blur radius
+
+4. **Time display** — Added conditional time display below the date. When `item.created_at` exists (truthy), renders:
    ```jsx
-   <View
-     className="h-3 rounded-t-3xl -mx-6 -mt-6 mb-4"
-     style={{ backgroundColor: feelColor }}
-   />
+   <Text className="text-xs text-gray-400">
+     {formatTime(item.created_at)}
+   </Text>
    ```
-   - `h-3`: 12px tall strip
-   - `rounded-t-3xl`: matches the card's top border radius
-   - `-mx-6`: negative horizontal margin cancels the parent's `p-6` so the banner spans full width
-   - `-mt-6`: negative top margin cancels the parent's `p-6` so the banner sits flush at the card top edge
-   - `mb-4`: 16px margin below to separate from the score title text
-   - `backgroundColor: feelColor`: dynamic color based on the user's feel score (green for high, red for low, etc.)
+   This shows the time like "2:30 PM" below the date like "Thu, Feb 6". Uses `text-xs` (12px) in `text-gray-400` (lighter gray than the date).
 
-3. **"Today's Feelsy Score" text — unchanged:** Stays exactly as is.
+5. **Enhanced note display** — Replaced the simple italic Text with a styled quote block:
+   - Old: `<Text className="mt-3 text-gray-600 italic">"{item.note}"</Text>`
+   - New: Wraps the note in a `View` with `className="mt-3 pl-3"` and `style={{ borderLeftWidth: 2, borderLeftColor: '#e5e7eb' }}`. The `#e5e7eb` is gray-200 from Tailwind's default palette. Inside, the Text keeps `className="text-gray-600 italic"`. This creates a subtle left-border quote effect.
 
-4. **New "Daily Check-In Complete ✓" badge (inserted inside the `items-center` View, as the first child before the emoji circle):**
-   ```jsx
-   <View className="bg-green-100 px-3 py-1 rounded-full mb-3">
-     <Text className="text-green-700 text-sm font-medium">Daily Check-In Complete ✓</Text>
-   </View>
-   ```
-   - `bg-green-100`: light green background pill
-   - `px-3 py-1`: horizontal 12px, vertical 4px padding
-   - `rounded-full`: pill shape
-   - `mb-3`: 12px margin below before the emoji circle
-   - Text uses `text-green-700` (dark green), `text-sm` (14px), `font-medium` (500 weight)
-   - Content is the literal string `Daily Check-In Complete ✓` (with Unicode check mark U+2713)
+---
 
-5. **Emoji circle — size increase:**
-   - Old: `className="h-32 w-32 items-center justify-center rounded-full"`
-   - New: `className="h-36 w-36 items-center justify-center rounded-full"`
-   - Changed `h-32 w-32` (128px) to `h-36 w-36` (144px) — 16px larger in both dimensions
-   - Everything else about the emoji circle stays identical (style, inner Text)
+### JSX STRUCTURE (complete component return)
 
-6. **Score text, label text, mood/energy breakdown — all unchanged.** These stay exactly as they are.
+Replace the entire return statement (lines 91-123 in the original) with the following:
 
-7. **New streak info (inserted immediately after the mood/energy `flex-row gap-4` View, before the note conditional):**
-   ```jsx
-   <View className="mt-3 flex-row items-center">
-     <Text className="text-sm text-gray-500">🔥 {stats?.current_streak || 0} day streak</Text>
-   </View>
-   ```
-   - `mt-3`: 12px margin above
-   - `flex-row items-center`: horizontal layout, vertically centered
-   - Text: `text-sm text-gray-500` — 14px, gray-500 color
-   - Content uses fire emoji `🔥` followed by a space, then `{stats?.current_streak || 0}` (safely handles null stats by defaulting to 0), then ` day streak`
+```jsx
+return (
+  <SafeAreaView className="flex-1 bg-gray-50">
+    <View className="px-6 pt-8 pb-4">
+      <Text className="text-3xl font-bold text-gray-900">History</Text>
+      <Text className="mt-1 text-base text-gray-500">
+        {total} total check-ins
+      </Text>
+    </View>
 
-8. **Note conditional and Share button — unchanged.** Both stay exactly as they are.
+    {/* Filter Chips */}
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      className="px-4 mb-4"
+      contentContainerStyle={{ gap: 8 }}
+    >
+      {[
+        { key: 'all', label: 'All' },
+        { key: 'great', label: 'Great (80+)' },
+        { key: 'good', label: 'Good (60+)' },
+        { key: 'low', label: 'Low (<40)' },
+      ].map((filter) => (
+        <Pressable
+          key={filter.key}
+          onPress={() => {
+            setScoreFilter(filter.key);
+            hapticSelection();
+          }}
+          className={`rounded-full px-4 py-2 ${
+            scoreFilter === filter.key
+              ? 'bg-primary-600'
+              : 'bg-gray-100'
+          }`}
+        >
+          <Text
+            className={`text-sm font-medium ${
+              scoreFilter === filter.key
+                ? 'text-white'
+                : 'text-gray-700'
+            }`}
+          >
+            {filter.label}
+          </Text>
+        </Pressable>
+      ))}
+    </ScrollView>
+
+    <SectionList
+      sections={groupByMonth(filteredChecks)}
+      renderItem={renderItem}
+      renderSectionHeader={renderSectionHeader}
+      keyExtractor={(item) => item.id}
+      refreshControl={
+        <RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} />
+      }
+      onEndReached={() => {
+        if (checks.length < total) loadHistory();
+      }}
+      onEndReachedThreshold={0.5}
+      ListHeaderComponent={
+        checks.length > 0 ? (
+          <View className="mx-4 mb-4 rounded-2xl bg-white p-4 shadow-sm">
+            <Text className="text-base font-semibold text-gray-900">This Week</Text>
+            <View className="flex-row items-end justify-between mt-3" style={{ height: 60 }}>
+              {getWeeklyData().map((item, index) => (
+                <View key={index} className="items-center" style={{ width: 32 }}>
+                  <View
+                    style={{
+                      width: 32,
+                      height: item.score !== null ? (item.score / 100) * 60 : 20,
+                      backgroundColor: item.color,
+                      borderTopLeftRadius: 8,
+                      borderTopRightRadius: 8,
+                      opacity: item.score !== null ? 1 : 0.3,
+                    }}
+                  />
+                </View>
+              ))}
+            </View>
+            <View className="flex-row justify-between mt-2">
+              {getWeeklyData().map((item, index) => (
+                <Text key={index} className="text-xs text-gray-400 text-center" style={{ width: 32 }}>
+                  {item.day}
+                </Text>
+              ))}
+            </View>
+          </View>
+        ) : null
+      }
+      ListEmptyComponent={
+        !isLoading ? (
+          <View className="flex-1 items-center justify-center py-20">
+            <Text className="text-6xl mb-4">📝</Text>
+            <Text className="text-lg font-semibold text-gray-900">No check-ins yet</Text>
+            <Text className="text-gray-500 mt-2">Start tracking your feels!</Text>
+          </View>
+        ) : null
+      }
+      contentContainerStyle={{ paddingBottom: 100 }}
+      stickySectionHeadersEnabled={false}
+    />
+  </SafeAreaView>
+);
+```
+
+**Detailed JSX structure description (top to bottom):**
+
+### 1. SafeAreaView wrapper
+- `className="flex-1 bg-gray-50"` — full screen, light gray background
+- Identical to original
+
+### 2. Header section (unchanged)
+- `View className="px-6 pt-8 pb-4"` — container
+  - `Text className="text-3xl font-bold text-gray-900"` — "History"
+  - `Text className="mt-1 text-base text-gray-500"` — "{total} total check-ins"
+
+### 3. Filter Chips section (NEW — inserted between header and list)
+- `ScrollView` with `horizontal`, `showsHorizontalScrollIndicator={false}`, `className="px-4 mb-4"`, `contentContainerStyle={{ gap: 8 }}`
+- Contains 4 filter chip definitions as an inline array `.map()`:
+  - `{ key: 'all', label: 'All' }` — shows all check-ins
+  - `{ key: 'great', label: 'Great (80+)' }` — filters to feel_score >= 80
+  - `{ key: 'good', label: 'Good (60+)' }` — filters to feel_score >= 60
+  - `{ key: 'low', label: 'Low (<40)' }` — filters to feel_score < 40
+- Each chip is a `Pressable`:
+  - `key={filter.key}` for React key
+  - `onPress` sets `scoreFilter` to `filter.key` and calls `hapticSelection()` for tactile feedback
+  - `className`: dynamic — active chip gets `bg-primary-600` (purple), inactive gets `bg-gray-100`. Both share `rounded-full px-4 py-2`
+  - Inner `Text`:
+    - `className`: dynamic — active gets `text-white`, inactive gets `text-gray-700`. Both share `text-sm font-medium`
+    - Content: `filter.label`
+
+### 4. SectionList (replaces FlatList)
+- **`sections`**: `{groupByMonth(filteredChecks)}` — the filtered checks grouped by month
+- **`renderItem`**: `{renderItem}` — the enhanced card renderer
+- **`renderSectionHeader`**: `{renderSectionHeader}` — the month header renderer
+- **`keyExtractor`**: `{(item) => item.id}` — unchanged
+- **`refreshControl`**: `<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} />` — unchanged
+- **`onEndReached`**: `{() => { if (checks.length < total) loadHistory(); }}` — unchanged, still loads more pages. Note: uses `checks.length` (unfiltered) not `filteredChecks.length` because the total count from the API corresponds to unfiltered data.
+- **`onEndReachedThreshold`**: `{0.5}` — unchanged
+- **`stickySectionHeadersEnabled`**: `{false}` — section headers scroll with content, not sticky. This gives a cleaner look on iOS.
+
+### 5. ListHeaderComponent (NEW — weekly mini chart)
+
+Rendered at the top of the SectionList, before any section headers. Only shown when `checks.length > 0`.
+
+**JSX structure:**
+```
+View (mx-4 mb-4 rounded-2xl bg-white p-4 shadow-sm) — card container
+  Text (text-base font-semibold text-gray-900) — "This Week"
+  View (flex-row items-end justify-between mt-3, style height: 60) — bar chart container
+    {getWeeklyData().map()} — 7 bars
+      View (items-center, style width: 32) — bar column wrapper
+        View (style: dynamic) — the actual bar
+          width: 32
+          height: score !== null ? (score / 100) * 60 : 20
+            — proportional height: a score of 100 = 60px tall, score of 50 = 30px tall
+            — null score (no check-in) = 20px placeholder
+          backgroundColor: item.color
+            — from getColorForScore for real scores, or '#d1d5db' (gray-300) for missing days
+          borderTopLeftRadius: 8
+          borderTopRightRadius: 8
+            — rounded top corners only
+          opacity: score !== null ? 1 : 0.3
+            — full opacity for real data, 30% opacity for placeholder bars
+  View (flex-row justify-between mt-2) — day labels row
+    {getWeeklyData().map()} — 7 day labels
+      Text (text-xs text-gray-400 text-center, style width: 32) — "M", "T", "W", etc.
+```
+
+**Key details:**
+- Bar height formula: `(item.score / 100) * 60` — e.g., score 80 → height 48px, score 40 → height 24px
+- Placeholder bars for missing days: height 20px, opacity 0.3, color gray-300
+- Each bar has `width: 32` and `borderTopLeftRadius: 8, borderTopRightRadius: 8` for rounded top corners
+- The container `View` has `style={{ height: 60 }}` to constrain the chart area
+- `items-end` on the container aligns bars to the bottom
+- `justify-between` distributes the 7 bars evenly across the width
+- `getWeeklyData()` is called twice (once for bars, once for labels) — this is acceptable for 7 items, no performance concern
+
+### 6. ListEmptyComponent (unchanged)
+- Shows when no sections/data exist and loading is complete
+- Same emoji, title, and subtitle text
+
+### 7. contentContainerStyle (unchanged)
+- `{{ paddingBottom: 100 }}` — space for tab bar
 
 ---
 
 ### COMPLETE RESULTING FILE
 
-For absolute clarity, here is the complete file that should result from these changes:
+For absolute clarity, here is the complete `history.tsx` file that should result from all these changes:
 
 ```typescript
-import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, Pressable, Share, TextInput, Alert } from 'react-native';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { View, Text, SectionList, RefreshControl, ScrollView, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useAuth } from '../../contexts/AuthContext';
-import Button from '../../components/ui/Button';
 import api from '../../lib/api';
-import { hapticSuccess, hapticSelection, hapticMedium } from '../../lib/haptics';
-import { FeelCheck, FeelStats, MOOD_EMOJIS, getColorForScore, getFeelLabel } from '../../types/feel';
+import { FeelCheck, getColorForScore, getFeelLabel } from '../../types/feel';
+import { hapticSelection } from '../../lib/haptics';
 
-export default function HomeScreen() {
-  const { user } = useAuth();
-  const [todayCheck, setTodayCheck] = useState<FeelCheck | null>(null);
-  const [stats, setStats] = useState<FeelStats | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [showCheckin, setShowCheckin] = useState(false);
-
-  // Check-in form state
-  const [moodScore, setMoodScore] = useState(50);
-  const [energyScore, setEnergyScore] = useState(50);
-  const [selectedEmoji, setSelectedEmoji] = useState('😊');
-  const [note, setNote] = useState('');
+export default function HistoryScreen() {
+  const [checks, setChecks] = useState<FeelCheck[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [total, setTotal] = useState(0);
+  const [offset, setOffset] = useState(0);
+  const [scoreFilter, setScoreFilter] = useState('all');
+  const limit = 20;
 
   useEffect(() => {
-    loadData();
+    loadHistory();
   }, []);
 
-  const loadData = async () => {
+  const loadHistory = async (refresh = false) => {
     try {
-      const [todayRes, statsRes] = await Promise.all([
-        api.get('/feels/today').catch(() => null),
-        api.get('/feels/stats'),
-      ]);
-      if (todayRes?.data) setTodayCheck(todayRes.data);
-      if (statsRes?.data) setStats(statsRes.data);
+      const newOffset = refresh ? 0 : offset;
+      const res = await api.get(`/feels/history?limit=${limit}&offset=${newOffset}`);
+      if (refresh) {
+        setChecks(res.data.data || []);
+      } else {
+        setChecks(prev => [...prev, ...(res.data.data || [])]);
+      }
+      setTotal(res.data.total || 0);
+      setOffset(newOffset + limit);
     } catch (error) {
-      console.log('Error loading data:', error);
-    }
-  };
-
-  const handleCheckIn = async () => {
-    setIsLoading(true);
-    try {
-      const res = await api.post('/feels', {
-        mood_score: moodScore,
-        energy_score: energyScore,
-        mood_emoji: selectedEmoji,
-        note,
-      });
-      setTodayCheck(res.data);
-      setShowCheckin(false);
-      hapticSuccess();
-      loadData();
-      setTimeout(() => {
-        Alert.alert(
-          'Share Your Vibes?',
-          'Let your friends know how you are feeling!',
-          [
-            { text: 'Not now', style: 'cancel' },
-            { text: 'Share', onPress: handleShare },
-          ]
-        );
-      }, 800);
-    } catch (error: any) {
-      console.log('Check-in error:', error.response?.data?.message || error.message);
+      console.log('Error loading history:', error);
     } finally {
       setIsLoading(false);
+      setIsRefreshing(false);
     }
   };
 
-  const handleShare = async () => {
-    if (!todayCheck) return;
-    hapticMedium();
-    try {
-      const label = getFeelLabel(todayCheck.feel_score);
-      const filled = Math.floor(todayCheck.feel_score / 10);
-      const bar = '█'.repeat(filled) + '░'.repeat(10 - filled);
-      const message = `${todayCheck.mood_emoji} My Feelsy Check-In\n\n` +
-        `Score: ${todayCheck.feel_score}/100 — ${label}\n` +
-        `${bar}\n\n` +
-        `Mood: ${todayCheck.mood_score} | Energy: ${todayCheck.energy_score}\n` +
-        (todayCheck.note ? `"${todayCheck.note}"\n\n` : '\n') +
-        `🔥 ${stats?.current_streak || 0} day streak\n\n` +
-        `Track your vibes → Feelsy App`;
-      await Share.share({ message });
-    } catch (error) {
-      console.log('Share error:', error);
-    }
+  const onRefresh = useCallback(() => {
+    setIsRefreshing(true);
+    setOffset(0);
+    loadHistory(true);
+  }, []);
+
+  const formatDate = (dateStr: string) => {
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('en-US', {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+    });
   };
 
-  const feelScore = todayCheck?.feel_score ?? Math.round((moodScore + energyScore) / 2);
-  const feelColor = getColorForScore(feelScore);
+  const formatTime = (dateStr: string): string => {
+    const date = new Date(dateStr);
+    return date.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    });
+  };
+
+  const filteredChecks = useMemo(() => {
+    switch (scoreFilter) {
+      case 'great':
+        return checks.filter((c) => c.feel_score >= 80);
+      case 'good':
+        return checks.filter((c) => c.feel_score >= 60);
+      case 'low':
+        return checks.filter((c) => c.feel_score < 40);
+      default:
+        return checks;
+    }
+  }, [checks, scoreFilter]);
+
+  const groupByMonth = (data: FeelCheck[]): { title: string; data: FeelCheck[] }[] => {
+    const groups: Record<string, FeelCheck[]> = {};
+    data.forEach((check) => {
+      const date = new Date(check.check_date);
+      const key = date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(check);
+    });
+    return Object.entries(groups).map(([title, items]) => ({
+      title,
+      data: items,
+    }));
+  };
+
+  const getWeeklyData = (): { day: string; score: number | null; color: string }[] => {
+    const days = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+    const today = new Date();
+    const result: { day: string; score: number | null; color: string }[] = [];
+
+    for (let i = 6; i >= 0; i--) {
+      const date = new Date(today);
+      date.setDate(today.getDate() - i);
+      const dayOfWeek = date.getDay();
+      const dayLabel = days[dayOfWeek === 0 ? 6 : dayOfWeek - 1];
+
+      const dateStr = date.toISOString().split('T')[0];
+      const match = checks.find((c) => c.check_date.startsWith(dateStr));
+
+      result.push({
+        day: dayLabel,
+        score: match ? match.feel_score : null,
+        color: match ? getColorForScore(match.feel_score) : '#d1d5db',
+      });
+    }
+
+    return result;
+  };
+
+  const renderSectionHeader = ({ section }: { section: { title: string; data: FeelCheck[] } }) => (
+    <View className="px-4 pt-6 pb-2">
+      <Text className="text-lg font-bold text-gray-900">{section.title}</Text>
+      <Text className="text-sm text-gray-500">
+        {section.data.length} check-in{section.data.length !== 1 ? 's' : ''}
+      </Text>
+    </View>
+  );
+
+  const renderItem = ({ item }: { item: FeelCheck }) => {
+    const color = getColorForScore(item.feel_score);
+    return (
+      <View
+        className="mx-4 mb-3 rounded-2xl bg-white p-4 shadow-sm"
+        style={{ borderLeftWidth: 4, borderLeftColor: color }}
+      >
+        <View className="flex-row items-center justify-between">
+          <View className="flex-row items-center">
+            <View
+              className="h-16 w-16 items-center justify-center rounded-full"
+              style={{
+                backgroundColor: color + '20',
+                shadowColor: color,
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.2,
+                shadowRadius: 4,
+              }}
+            >
+              <Text className="text-2xl">{item.mood_emoji || '😊'}</Text>
+            </View>
+            <View className="ml-3">
+              <Text className="text-lg font-semibold text-gray-900">
+                {getFeelLabel(item.feel_score)}
+              </Text>
+              <Text className="text-sm text-gray-500">
+                {formatDate(item.check_date)}
+              </Text>
+              {item.created_at && (
+                <Text className="text-xs text-gray-400">
+                  {formatTime(item.created_at)}
+                </Text>
+              )}
+            </View>
+          </View>
+          <View className="items-end">
+            <Text className="text-2xl font-bold" style={{ color }}>
+              {item.feel_score}
+            </Text>
+            <View className="flex-row gap-2 mt-1">
+              <Text className="text-xs text-gray-400">M:{item.mood_score}</Text>
+              <Text className="text-xs text-gray-400">E:{item.energy_score}</Text>
+            </View>
+          </View>
+        </View>
+        {item.note && (
+          <View className="mt-3 pl-3" style={{ borderLeftWidth: 2, borderLeftColor: '#e5e7eb' }}>
+            <Text className="text-gray-600 italic">"{item.note}"</Text>
+          </View>
+        )}
+      </View>
+    );
+  };
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50">
-      <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 100 }}>
-        <View className="px-6 pt-8">
-          {/* Header */}
-          <Text className="text-3xl font-bold text-gray-900">
-            Hey there
-          </Text>
-          <Text className="mt-1 text-base text-gray-500">
-            How are you feeling today?
-          </Text>
+      <View className="px-6 pt-8 pb-4">
+        <Text className="text-3xl font-bold text-gray-900">History</Text>
+        <Text className="mt-1 text-base text-gray-500">
+          {total} total check-ins
+        </Text>
+      </View>
 
-          {/* Today's Check-in Card */}
-          {todayCheck ? (
-            <View
-              className="mt-6 rounded-3xl bg-white p-6 shadow-sm overflow-hidden"
-              style={{ borderWidth: 1, borderColor: feelColor + '40' }}
+      {/* Filter Chips */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        className="px-4 mb-4"
+        contentContainerStyle={{ gap: 8 }}
+      >
+        {[
+          { key: 'all', label: 'All' },
+          { key: 'great', label: 'Great (80+)' },
+          { key: 'good', label: 'Good (60+)' },
+          { key: 'low', label: 'Low (<40)' },
+        ].map((filter) => (
+          <Pressable
+            key={filter.key}
+            onPress={() => {
+              setScoreFilter(filter.key);
+              hapticSelection();
+            }}
+            className={`rounded-full px-4 py-2 ${
+              scoreFilter === filter.key
+                ? 'bg-primary-600'
+                : 'bg-gray-100'
+            }`}
+          >
+            <Text
+              className={`text-sm font-medium ${
+                scoreFilter === filter.key
+                  ? 'text-white'
+                  : 'text-gray-700'
+              }`}
             >
-              {/* Colored top banner */}
-              <View
-                className="h-3 rounded-t-3xl -mx-6 -mt-6 mb-4"
-                style={{ backgroundColor: feelColor }}
-              />
+              {filter.label}
+            </Text>
+          </Pressable>
+        ))}
+      </ScrollView>
 
-              <Text className="text-sm font-medium text-gray-500">Today's Feelsy Score</Text>
-
-              <View className="mt-4 items-center">
-                {/* Daily Check-In Complete badge */}
-                <View className="bg-green-100 px-3 py-1 rounded-full mb-3">
-                  <Text className="text-green-700 text-sm font-medium">Daily Check-In Complete ✓</Text>
-                </View>
-
-                <View
-                  className="h-36 w-36 items-center justify-center rounded-full"
-                  style={{ backgroundColor: feelColor + '20' }}
-                >
-                  <Text className="text-5xl">{todayCheck.mood_emoji}</Text>
-                </View>
-                <Text className="mt-4 text-5xl font-bold" style={{ color: feelColor }}>
-                  {todayCheck.feel_score}
-                </Text>
-                <Text className="mt-1 text-lg font-medium text-gray-600">
-                  {getFeelLabel(todayCheck.feel_score)}
-                </Text>
-
-                <View className="mt-4 flex-row gap-4">
-                  <View className="items-center">
-                    <Text className="text-sm text-gray-500">Mood</Text>
-                    <Text className="text-lg font-semibold text-gray-900">{todayCheck.mood_score}</Text>
-                  </View>
-                  <View className="h-8 w-px bg-gray-200" />
-                  <View className="items-center">
-                    <Text className="text-sm text-gray-500">Energy</Text>
-                    <Text className="text-lg font-semibold text-gray-900">{todayCheck.energy_score}</Text>
-                  </View>
-                </View>
-
-                {/* Streak info */}
-                <View className="mt-3 flex-row items-center">
-                  <Text className="text-sm text-gray-500">🔥 {stats?.current_streak || 0} day streak</Text>
-                </View>
-
-                {todayCheck.note && (
-                  <Text className="mt-4 text-center text-gray-600 italic">
-                    "{todayCheck.note}"
-                  </Text>
-                )}
-              </View>
-
-              <Button
-                title="Share Your Vibes"
-                variant="outline"
-                onPress={handleShare}
-                size="md"
-              />
-            </View>
-          ) : (
-            // Check-in Form
-            <View className="mt-6 rounded-3xl bg-white p-6 shadow-sm">
-              {!showCheckin ? (
-                <Pressable
-                  onPress={() => { setShowCheckin(true); hapticSelection(); }}
-                  className="items-center py-8"
-                >
-                  <Text className="text-6xl">✨</Text>
-                  <Text className="mt-4 text-xl font-semibold text-gray-900">
-                    Log Today's Feels
-                  </Text>
-                  <Text className="mt-2 text-gray-500">
-                    Tap to start your daily check-in
-                  </Text>
-                </Pressable>
-              ) : (
-                <View>
-                  <Text className="text-lg font-semibold text-gray-900 mb-4">Daily Check-In</Text>
-
-                  {/* Mood Score */}
-                  <View className="mb-6">
-                    <Text className="text-sm font-medium text-gray-700 mb-2">
-                      Mood: {moodScore}
-                    </Text>
-                    <View className="flex-row items-center">
-                      <Text className="text-xl mr-2">😔</Text>
-                      <View className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
-                        <View
-                          className="h-full rounded-full"
-                          style={{ width: `${moodScore}%`, backgroundColor: getColorForScore(moodScore) }}
-                        />
-                      </View>
-                      <Text className="text-xl ml-2">😊</Text>
-                    </View>
-                    <View className="flex-row justify-between mt-2">
-                      {[20, 40, 60, 80, 100].map((val) => (
-                        <Pressable
-                          key={val}
-                          onPress={() => { setMoodScore(val); hapticSelection(); }}
-                          className="px-3 py-1 rounded-full"
-                          style={{ backgroundColor: moodScore === val ? getColorForScore(val) + '30' : 'transparent' }}
-                        >
-                          <Text style={{ color: getColorForScore(val) }}>{val}</Text>
-                        </Pressable>
-                      ))}
-                    </View>
-                  </View>
-
-                  {/* Energy Score */}
-                  <View className="mb-6">
-                    <Text className="text-sm font-medium text-gray-700 mb-2">
-                      Energy: {energyScore}
-                    </Text>
-                    <View className="flex-row items-center">
-                      <Text className="text-xl mr-2">😴</Text>
-                      <View className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
-                        <View
-                          className="h-full rounded-full"
-                          style={{ width: `${energyScore}%`, backgroundColor: getColorForScore(energyScore) }}
-                        />
-                      </View>
-                      <Text className="text-xl ml-2">⚡</Text>
-                    </View>
-                    <View className="flex-row justify-between mt-2">
-                      {[20, 40, 60, 80, 100].map((val) => (
-                        <Pressable
-                          key={val}
-                          onPress={() => { setEnergyScore(val); hapticSelection(); }}
-                          className="px-3 py-1 rounded-full"
-                          style={{ backgroundColor: energyScore === val ? getColorForScore(val) + '30' : 'transparent' }}
-                        >
-                          <Text style={{ color: getColorForScore(val) }}>{val}</Text>
-                        </Pressable>
-                      ))}
-                    </View>
-                  </View>
-
-                  {/* Emoji Selector */}
-                  <View className="mb-6">
-                    <Text className="text-sm font-medium text-gray-700 mb-2">How do you feel?</Text>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                      <View className="flex-row gap-2">
-                        {MOOD_EMOJIS.map((emoji) => (
-                          <Pressable
-                            key={emoji}
-                            onPress={() => { setSelectedEmoji(emoji); hapticSelection(); }}
-                            className={`w-12 h-12 items-center justify-center rounded-full ${
-                              selectedEmoji === emoji ? 'bg-primary-100' : 'bg-gray-100'
-                            }`}
-                          >
-                            <Text className="text-2xl">{emoji}</Text>
-                          </Pressable>
-                        ))}
-                      </View>
-                    </ScrollView>
-                  </View>
-
-                  {/* Note */}
-                  <View className="mb-6">
-                    <Text className="text-sm font-medium text-gray-700 mb-2">Add a note (optional)</Text>
-                    <TextInput
-                      value={note}
-                      onChangeText={setNote}
-                      placeholder="What's on your mind?"
-                      className="bg-gray-100 rounded-xl px-4 py-3 text-base"
-                      multiline
-                      numberOfLines={2}
+      <SectionList
+        sections={groupByMonth(filteredChecks)}
+        renderItem={renderItem}
+        renderSectionHeader={renderSectionHeader}
+        keyExtractor={(item) => item.id}
+        refreshControl={
+          <RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} />
+        }
+        onEndReached={() => {
+          if (checks.length < total) loadHistory();
+        }}
+        onEndReachedThreshold={0.5}
+        ListHeaderComponent={
+          checks.length > 0 ? (
+            <View className="mx-4 mb-4 rounded-2xl bg-white p-4 shadow-sm">
+              <Text className="text-base font-semibold text-gray-900">This Week</Text>
+              <View className="flex-row items-end justify-between mt-3" style={{ height: 60 }}>
+                {getWeeklyData().map((item, index) => (
+                  <View key={index} className="items-center" style={{ width: 32 }}>
+                    <View
+                      style={{
+                        width: 32,
+                        height: item.score !== null ? (item.score / 100) * 60 : 20,
+                        backgroundColor: item.color,
+                        borderTopLeftRadius: 8,
+                        borderTopRightRadius: 8,
+                        opacity: item.score !== null ? 1 : 0.3,
+                      }}
                     />
-                  </View>
-
-                  {/* Preview Score */}
-                  <View className="items-center mb-6 p-4 rounded-2xl" style={{ backgroundColor: feelColor + '15' }}>
-                    <Text className="text-sm text-gray-600">Your Feelsy Score</Text>
-                    <Text className="text-4xl font-bold" style={{ color: feelColor }}>{feelScore}</Text>
-                    <Text className="text-lg" style={{ color: feelColor }}>{getFeelLabel(feelScore)}</Text>
-                  </View>
-
-                  <Button
-                    title="Log My Feels"
-                    onPress={handleCheckIn}
-                    isLoading={isLoading}
-                    size="lg"
-                  />
-                </View>
-              )}
-            </View>
-          )}
-
-          {/* Stats Cards */}
-          {stats && (
-            <View className="mt-6 flex-row gap-3">
-              <View className="flex-1 rounded-2xl bg-white p-4 shadow-sm">
-                <Text className="text-3xl">🔥</Text>
-                <Text className="mt-2 text-2xl font-bold text-gray-900">{stats.current_streak}</Text>
-                <Text className="text-sm text-gray-500">Day Streak</Text>
-              </View>
-              <View className="flex-1 rounded-2xl bg-white p-4 shadow-sm">
-                <Text className="text-3xl">📊</Text>
-                <Text className="mt-2 text-2xl font-bold text-gray-900">{stats.total_check_ins}</Text>
-                <Text className="text-sm text-gray-500">Check-ins</Text>
-              </View>
-              <View className="flex-1 rounded-2xl bg-white p-4 shadow-sm">
-                <Text className="text-3xl">✨</Text>
-                <Text className="mt-2 text-2xl font-bold text-gray-900">{Math.round(stats.average_score)}</Text>
-                <Text className="text-sm text-gray-500">Avg Score</Text>
-              </View>
-            </View>
-          )}
-
-          {/* Badges */}
-          {stats && stats.unlocked_badges.length > 0 && (
-            <View className="mt-6 rounded-2xl bg-white p-4 shadow-sm">
-              <Text className="text-lg font-semibold text-gray-900 mb-3">Your Badges</Text>
-              <View className="flex-row flex-wrap gap-2">
-                {stats.unlocked_badges.map((badge) => (
-                  <View key={badge} className="bg-primary-50 px-3 py-1 rounded-full">
-                    <Text className="text-primary-700">{badge}</Text>
                   </View>
                 ))}
               </View>
+              <View className="flex-row justify-between mt-2">
+                {getWeeklyData().map((item, index) => (
+                  <Text key={index} className="text-xs text-gray-400 text-center" style={{ width: 32 }}>
+                    {item.day}
+                  </Text>
+                ))}
+              </View>
             </View>
-          )}
-        </View>
-      </ScrollView>
+          ) : null
+        }
+        ListEmptyComponent={
+          !isLoading ? (
+            <View className="flex-1 items-center justify-center py-20">
+              <Text className="text-6xl mb-4">📝</Text>
+              <Text className="text-lg font-semibold text-gray-900">No check-ins yet</Text>
+              <Text className="text-gray-500 mt-2">Start tracking your feels!</Text>
+            </View>
+          ) : null
+        }
+        contentContainerStyle={{ paddingBottom: 100 }}
+        stickySectionHeadersEnabled={false}
+      />
     </SafeAreaView>
   );
 }
@@ -658,59 +868,67 @@ export default function HomeScreen() {
 
 ### STYLING REFERENCE
 
-Key NativeWind classes used in this change:
+Key NativeWind classes and inline styles used:
 
-| Element | Classes | Purpose |
-|---------|---------|---------|
-| Outer card | `mt-6 rounded-3xl bg-white p-6 shadow-sm overflow-hidden` | Card container with overflow hidden for banner clipping |
-| Outer card style | `borderWidth: 1, borderColor: feelColor + '40'` | Subtle colored border (25% opacity) |
-| Top banner | `h-3 rounded-t-3xl -mx-6 -mt-6 mb-4` | 12px colored strip flush with card top |
-| Complete badge wrapper | `bg-green-100 px-3 py-1 rounded-full mb-3` | Light green pill badge |
-| Complete badge text | `text-green-700 text-sm font-medium` | Dark green badge text |
-| Emoji circle | `h-36 w-36 items-center justify-center rounded-full` | 144px circle (was 128px) |
-| Streak info wrapper | `mt-3 flex-row items-center` | Horizontal streak display |
-| Streak info text | `text-sm text-gray-500` | Small gray streak text |
+| Element | Classes / Style | Purpose |
+|---------|----------------|---------|
+| Card container | `mx-4 mb-3 rounded-2xl bg-white p-4 shadow-sm` + `borderLeftWidth: 4, borderLeftColor: color` | Card with colored left accent border |
+| Emoji circle | `h-16 w-16 items-center justify-center rounded-full` + `shadowColor, shadowOffset, shadowOpacity, shadowRadius` | Larger circle (64px) with colored shadow |
+| Time text | `text-xs text-gray-400` | 12px light gray time display |
+| Note quote | `mt-3 pl-3` + `borderLeftWidth: 2, borderLeftColor: '#e5e7eb'` | Left-bordered quote block using gray-200 |
+| Section header container | `px-4 pt-6 pb-2` | Section header padding |
+| Section title | `text-lg font-bold text-gray-900` | 18px bold month title |
+| Section count | `text-sm text-gray-500` | 14px gray check-in count |
+| Filter chip (active) | `rounded-full px-4 py-2 bg-primary-600` | Purple pill, white text |
+| Filter chip (inactive) | `rounded-full px-4 py-2 bg-gray-100` | Gray pill, dark text |
+| Weekly chart card | `mx-4 mb-4 rounded-2xl bg-white p-4 shadow-sm` | White card for chart |
+| Weekly chart title | `text-base font-semibold text-gray-900` | "This Week" label |
+| Bar container | `flex-row items-end justify-between mt-3`, `height: 60` | 60px tall bar area, aligned bottom |
+| Individual bar | `width: 32`, dynamic `height`, `borderTopLeftRadius: 8, borderTopRightRadius: 8` | Rounded-top bar |
+| Day label | `text-xs text-gray-400 text-center`, `width: 32` | Centered day letter |
 
 ---
 
 ### API ENDPOINTS
 
 No new API endpoints. Existing endpoints used:
-- `GET /api/feels/today` — returns today's `FeelCheck` or 404
-- `GET /api/feels/stats` — returns `FeelStats` with `current_streak`, `total_check_ins`, `average_score`, `unlocked_badges`
-- `POST /api/feels` — creates a new check-in, body: `{ mood_score, energy_score, mood_emoji, note }`
+- `GET /api/feels/history?limit=20&offset=0` — returns `{ data: FeelCheck[], total: number, limit: number, offset: number }`. Each FeelCheck in data includes `check_date` (date) and `created_at` (timestamp).
 
 ---
 
 ### NAVIGATION FLOW
 
-- **Where does this screen come from?** Tab bar in `(protected)/_layout.tsx` — it's the "Home" tab
-- **Where does it navigate to?** Nowhere — the share sheet is a system modal opened by `Share.share()`; the Alert is a native dialog
-- **What data does it pass?** Share message is a formatted string passed to the system share sheet
+- **Where does this screen come from?** Tab bar in `(protected)/_layout.tsx` — it's the "History" tab
+- **Where does it navigate to?** Nowhere — this is a read-only list view
+- **What data does it pass?** None
 
 ---
 
 ### APPLE COMPLIANCE CHECK
 
-1. **Does this screen work without login?** This is a protected screen — guest mode users can access it but it requires the auth context. Guest mode is handled by AuthContext. No changes affect guest mode functionality.
-2. **Is there placeholder text?** No. All text is real content: "Daily Check-In Complete ✓", "Today's Feelsy Score", "Share Your Vibes?", etc.
-3. **Does it use haptic feedback on interactions?** Yes — `hapticMedium()` on share button press, `hapticSuccess()` on successful check-in, `hapticSelection()` on form interactions. No new interactive elements were added that lack haptics.
-4. **Alert dialog:** Uses native `Alert.alert` which is fully compliant with iOS HIG. "Not now" uses `style: 'cancel'` for proper iOS button styling.
+1. **Does this screen work without login?** This is a protected screen — guest mode users can access it but it requires auth context. The screen handles empty data gracefully with the ListEmptyComponent.
+2. **Is there placeholder text?** No. All text is real: "History", "This Week", "No check-ins yet", "Start tracking your feels!", month names, day labels, filter labels.
+3. **Does it use haptic feedback on interactions?** Yes — `hapticSelection()` is called when tapping filter chips. Pull-to-refresh and scroll are system gestures that don't need custom haptics.
+4. **No external URLs or links.**
 
 ---
 
 ### SUMMARY OF ALL CHANGES
 
-| # | Location | What Changes | Lines Affected |
-|---|----------|-------------|----------------|
-| 1 | Import line 2 | Add `Alert` to react-native imports | Line 2 |
-| 2 | `handleShare` function | Replace plain text share with formatted card-style text | Lines 60-70 |
-| 3 | `handleCheckIn` function | Add `setTimeout` + `Alert.alert` after `loadData()` | After line 52 |
-| 4 | Result card outer View | Add `overflow-hidden`, add border style | Line 89 |
-| 5 | New top banner | Insert colored `View` as first child of card | After line 89 |
-| 6 | New completion badge | Insert green pill badge before emoji circle | Before emoji circle |
-| 7 | Emoji circle | Change `h-32 w-32` to `h-36 w-36` | Line 93 |
-| 8 | New streak info | Insert streak text after mood/energy breakdown | After line 115 |
+| # | File | What Changes |
+|---|------|-------------|
+| 1 | `mobile/types/feel.ts` | Add `created_at?: string` field to FeelCheck interface |
+| 2 | `mobile/app/(protected)/history.tsx` | Replace imports: add useMemo, SectionList, ScrollView, Pressable, hapticSelection; remove FlatList |
+| 3 | `mobile/app/(protected)/history.tsx` | Add `scoreFilter` state variable |
+| 4 | `mobile/app/(protected)/history.tsx` | Add `formatTime()` helper function |
+| 5 | `mobile/app/(protected)/history.tsx` | Add `filteredChecks` useMemo computed value |
+| 6 | `mobile/app/(protected)/history.tsx` | Add `groupByMonth()` helper function |
+| 7 | `mobile/app/(protected)/history.tsx` | Add `getWeeklyData()` helper function |
+| 8 | `mobile/app/(protected)/history.tsx` | Add `renderSectionHeader()` render function |
+| 9 | `mobile/app/(protected)/history.tsx` | Enhance `renderItem()`: colored left border, larger emoji with shadow, time display, styled note quote |
+| 10 | `mobile/app/(protected)/history.tsx` | Replace FlatList with SectionList in JSX |
+| 11 | `mobile/app/(protected)/history.tsx` | Add filter chips ScrollView above SectionList |
+| 12 | `mobile/app/(protected)/history.tsx` | Add weekly mini chart as ListHeaderComponent |
 
 **No other files need to be created or modified.**
 
@@ -721,9 +939,16 @@ No new API endpoints. Existing endpoints used:
 ### TypeScript Check
 Run: `cd mobile && npx tsc --noEmit`
 
-Expected: No type errors. `Alert` is a standard react-native export. All other types and functions are already imported and used. The `stats?.current_streak` uses optional chaining matching the existing `FeelStats | null` type.
+Expected: No type errors.
+- `SectionList`, `ScrollView`, `Pressable` are standard react-native exports
+- `useMemo` is a standard React hook
+- `hapticSelection` is exported from `../../lib/haptics`
+- `created_at?: string` is optional so existing code won't break
+- `groupByMonth` return type matches SectionList's `sections` prop type
+- `renderSectionHeader` parameter type matches SectionList's expected type
 
 ### Files Changed Summary
-| Action | File | Lines Changed |
-|--------|------|---------------|
-| MODIFY | `mobile/app/(protected)/home.tsx` | ~25 lines modified/added |
+| Action | File |
+|--------|------|
+| MODIFY | `mobile/types/feel.ts` |
+| MODIFY | `mobile/app/(protected)/history.tsx` |

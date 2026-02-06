@@ -7,6 +7,7 @@ export interface FeelCheck {
   note: string;
   color_hex: string;
   check_date: string;
+  created_at?: string;
 }
 
 export interface FeelStats {

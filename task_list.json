@@ -129,13 +129,13 @@
       "id": "enhance_011",
       "title": "Add share result card with gradient background after check-in",
       "description": "After completing a daily check-in, the result card shows the score but the share functionality (handleShare on line 60) shares plain text only. The requirement specifies shareable result cards with gradient backgrounds that create visually appealing social media content.\n\nModify file: mobile/app/(protected)/home.tsx:\n\n1. Enhance the post-check-in result card (todayCheck truthy branch, lines 89-130):\n- Wrap the existing card in a ViewShot-capturable container. Since react-native-view-shot is NOT in package.json, use the existing Share API but create a much richer text share format\n- Replace the simple share message with a formatted card-style share:\n  const handleShare = async () =\u003e {\n    if (!todayCheck) return;\n    hapticMedium();\n    const label = getFeelLabel(todayCheck.feel_score);\n    const bar = '█'.repeat(Math.floor(todayCheck.feel_score / 10)) + '░'.repeat(10 - Math.floor(todayCheck.feel_score / 10));\n    const message = `${todayCheck.mood_emoji} My Feelsy Check-In\\n\\n` +\n      `Score: ${todayCheck.feel_score}/100 — ${label}\\n` +\n      `${bar}\\n\\n` +\n      `Mood: ${todayCheck.mood_score} | Energy: ${todayCheck.energy_score}\\n` +\n      (todayCheck.note ? `\"${todayCheck.note}\"\\n\\n` : '\\n') +\n      `🔥 ${stats?.current_streak || 0} day streak\\n\\n` +\n      `Track your vibes → Feelsy App`;\n    await Share.share({ message });\n  };\n\n2. Enhance the result card visual design:\n- Add a colored gradient-like top banner to the card: View className='h-3 rounded-t-3xl -mx-6 -mt-6 mb-4' style={{ backgroundColor: feelColor }}\n- Add border: style={{ borderWidth: 1, borderColor: feelColor + '40' }} on the outer card View\n- Make the emoji circle larger: h-36 w-36 (from h-32 w-32)\n- Add 'Daily Check-In Complete ✓' badge above the emoji: View className='bg-green-100 px-3 py-1 rounded-full mb-3' with Text className='text-green-700 text-sm font-medium'\n- Below mood/energy breakdown, add the streak info: View className='mt-3 flex-row items-center' with Text '🔥 {stats.current_streak} day streak' in text-sm text-gray-500\n\n3. Add auto-share prompt after check-in:\n- After successful check-in (in handleCheckIn, after hapticSuccess), show a brief prompt: setTimeout(() =\u003e Alert.alert('Share Your Vibes?', 'Let your friends know how you are feeling!', [{text: 'Not now'}, {text: 'Share', onPress: handleShare}]), 800)",
-      "status": "in_progress",
+      "status": "completed",
       "priority": 6,
       "depends_on": [],
       "test_command": "cd mobile \u0026\u0026 npx tsc --noEmit",
       "auto_commit": true,
       "created_at": "",
-      "updated_at": "2026-02-06T19:20:45Z"
+      "updated_at": "2026-02-06T19:27:01Z"
     },
     {
       "id": "enhance_012",
@@ -156,25 +156,26 @@
       "id": "enhance_013",
       "title": "Add loading skeletons and error states to all screens",
       "description": "Multiple screens show no loading indicator during data fetch and have no error retry UI. The home screen silently logs errors to console (line 36). History and Friends screens set isLoading but don't show a spinner during initial load. App Store quality requires polished loading and error states.\n\nModify file: mobile/app/(protected)/home.tsx:\n- Add error state: const [error, setError] = useState\u003cstring | null\u003e(null);\n- In loadData catch: setError('Failed to load your data')\n- After header, before check-in card: if error, show error banner: View className='mx-0 mb-4 rounded-2xl bg-red-50 p-4 flex-row items-center justify-between'. Left: View with Text '😕' text-2xl and Text error message text-red-600. Right: Pressable onPress={() =\u003e { setError(null); loadData(); }} with Text 'Retry' className='text-red-600 font-semibold'\n- Add initial loading state: if (!todayCheck \u0026\u0026 !stats \u0026\u0026 !error), show skeleton: 3 View className='rounded-3xl bg-gray-100 h-64 mb-4 animate-pulse', 3 smaller View className='rounded-2xl bg-gray-100 h-24 flex-1' in flex-row (NativeWind doesn't have animate-pulse, so use opacity 0.5 instead)\n\nModify file: mobile/app/(protected)/history.tsx:\n- Add isLoading initial spinner: before FlatList, if (isLoading) return SafeAreaView with centered ActivityIndicator color='#8b5cf6' and Text 'Loading your history...' className='text-gray-500 mt-3'\n- Add error state same pattern as home\n\nModify file: mobile/app/(protected)/friends.tsx:\n- Add isLoading initial spinner same pattern\n- Add error state with retry\n- Add empty state for friends section: when friends.length === 0 and requests.length === 0, show: View items-center py-10, emoji '👋' text-5xl, Text 'No friends yet' text-lg font-semibold text-gray-900, Text 'Add friends by email above!' text-gray-500\n\nModify all screens: Replace all console.log error logging with setError state updates so users see feedback instead of silent failures.",
-      "status": "pending",
+      "status": "failed",
       "priority": 6,
       "depends_on": [],
       "test_command": "cd mobile \u0026\u0026 npx tsc --noEmit",
       "auto_commit": true,
       "created_at": "",
-      "updated_at": ""
+      "updated_at": "2026-02-06T19:32:01Z",
+      "error": "planning failed: claude CLI error: signal: killed\nstderr: "
     },
     {
       "id": "enhance_014",
       "title": "Add history screen date grouping and enhanced card design",
       "description": "The history screen shows a flat list of check-ins with no visual grouping. Users should see check-ins grouped by week or month for better temporal context. Cards need enhanced design with gradient accents.\n\nModify file: mobile/app/(protected)/history.tsx:\n\n1. Add date grouping logic:\n- Create helper function groupByMonth(checks: FeelCheck[]): { title: string; data: FeelCheck[] }[] that groups checks by 'Month Year' format (e.g., 'February 2026')\n- Replace FlatList with SectionList: import { SectionList } from 'react-native'\n- SectionList sections={groupByMonth(checks)} renderSectionHeader renders: View className='px-4 pt-6 pb-2' with Text className='text-lg font-bold text-gray-900' showing section.title and Text className='text-sm text-gray-500' showing count '{section.data.length} check-ins'\n\n2. Enhance individual card design (renderItem):\n- Add colored left border: style={{ borderLeftWidth: 4, borderLeftColor: color }} on the card View\n- Make the emoji circle slightly larger and add shadow effect: add style={{ shadowColor: color, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4 }}\n- Add time display: below the date, show formatted time from created_at field if available\n- Improve note display: add a subtle left border to the note quote: View className='mt-3 pl-3 border-l-2 border-gray-200' wrapping the italic note Text\n\n3. Add mini weekly chart at the top:\n- Before the SectionList, add a View className='mx-4 mb-4 rounded-2xl bg-white p-4 shadow-sm'\n- Title: 'This Week' text-base font-semibold text-gray-900\n- Show 7 small vertical bars for Mon-Sun: View className='flex-row items-end justify-between mt-3 h-16'\n- Each bar: View with width 32, rounded-t-lg, backgroundColor from getColorForScore, height proportional to feel_score (score/100 * 60). If no check-in that day, show dashed gray placeholder bar\n- Below bars: day labels (M T W T F S S) in text-xs text-gray-400\n- Calculate from the most recent 7 days of checks data\n\n4. Add search/filter:\n- Below header, add a horizontal filter row: ScrollView horizontal with Pressable chips for 'All', 'Great (80+)', 'Good (60+)', 'Low (\u003c40)'\n- State: scoreFilter string, filtered checks computed from filter\n- Each chip: rounded-full px-4 py-2, active bg-primary-600 text-white, inactive bg-gray-100 text-gray-700",
-      "status": "pending",
+      "status": "in_progress",
       "priority": 6,
       "depends_on": [],
       "test_command": "cd mobile \u0026\u0026 npx tsc --noEmit",
       "auto_commit": true,
       "created_at": "",
-      "updated_at": ""
+      "updated_at": "2026-02-06T19:32:01Z"
     }
   ]
 }

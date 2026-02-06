@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, FlatList, RefreshControl } from 'react-native';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { View, Text, SectionList, RefreshControl, ScrollView, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import api from '../../lib/api';
 import { FeelCheck, getColorForScore, getFeelLabel } from '../../types/feel';
+import { hapticSelection } from '../../lib/haptics';
 
 export default function HistoryScreen() {
   const [checks, setChecks] = useState<FeelCheck[]>([]);
@@ -10,6 +11,7 @@ export default function HistoryScreen() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);
+  const [scoreFilter, setScoreFilter] = useState('all');
   const limit = 20;
 
   useEffect(() => {
@@ -50,15 +52,93 @@ export default function HistoryScreen() {
     });
   };
 
+  const formatTime = (dateStr: string): string => {
+    const date = new Date(dateStr);
+    return date.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    });
+  };
+
+  const filteredChecks = useMemo(() => {
+    switch (scoreFilter) {
+      case 'great':
+        return checks.filter((c) => c.feel_score >= 80);
+      case 'good':
+        return checks.filter((c) => c.feel_score >= 60);
+      case 'low':
+        return checks.filter((c) => c.feel_score < 40);
+      default:
+        return checks;
+    }
+  }, [checks, scoreFilter]);
+
+  const groupByMonth = (data: FeelCheck[]): { title: string; data: FeelCheck[] }[] => {
+    const groups: Record<string, FeelCheck[]> = {};
+    data.forEach((check) => {
+      const date = new Date(check.check_date);
+      const key = date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(check);
+    });
+    return Object.entries(groups).map(([title, items]) => ({
+      title,
+      data: items,
+    }));
+  };
+
+  const getWeeklyData = (): { day: string; score: number | null; color: string }[] => {
+    const days = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+    const today = new Date();
+    const result: { day: string; score: number | null; color: string }[] = [];
+
+    for (let i = 6; i >= 0; i--) {
+      const date = new Date(today);
+      date.setDate(today.getDate() - i);
+      const dayOfWeek = date.getDay();
+      const dayLabel = days[dayOfWeek === 0 ? 6 : dayOfWeek - 1];
+
+      const dateStr = date.toISOString().split('T')[0];
+      const match = checks.find((c) => c.check_date.startsWith(dateStr));
+
+      result.push({
+        day: dayLabel,
+        score: match ? match.feel_score : null,
+        color: match ? getColorForScore(match.feel_score) : '#d1d5db',
+      });
+    }
+
+    return result;
+  };
+
+  const renderSectionHeader = ({ section }: { section: { title: string; data: FeelCheck[] } }) => (
+    <View className="px-4 pt-6 pb-2">
+      <Text className="text-lg font-bold text-gray-900">{section.title}</Text>
+      <Text className="text-sm text-gray-500">
+        {section.data.length} check-in{section.data.length !== 1 ? 's' : ''}
+      </Text>
+    </View>
+  );
+
   const renderItem = ({ item }: { item: FeelCheck }) => {
     const color = getColorForScore(item.feel_score);
     return (
-      <View className="mx-4 mb-3 rounded-2xl bg-white p-4 shadow-sm">
+      <View
+        className="mx-4 mb-3 rounded-2xl bg-white p-4 shadow-sm"
+        style={{ borderLeftWidth: 4, borderLeftColor: color }}
+      >
         <View className="flex-row items-center justify-between">
           <View className="flex-row items-center">
             <View
-              className="h-14 w-14 items-center justify-center rounded-full"
-              style={{ backgroundColor: color + '20' }}
+              className="h-16 w-16 items-center justify-center rounded-full"
+              style={{
+                backgroundColor: color + '20',
+                shadowColor: color,
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.2,
+                shadowRadius: 4,
+              }}
             >
               <Text className="text-2xl">{item.mood_emoji || '😊'}</Text>
             </View>
@@ -69,6 +149,11 @@ export default function HistoryScreen() {
               <Text className="text-sm text-gray-500">
                 {formatDate(item.check_date)}
               </Text>
+              {item.created_at && (
+                <Text className="text-xs text-gray-400">
+                  {formatTime(item.created_at)}
+                </Text>
+              )}
             </View>
           </View>
           <View className="items-end">
@@ -82,7 +167,9 @@ export default function HistoryScreen() {
           </View>
         </View>
         {item.note && (
-          <Text className="mt-3 text-gray-600 italic">"{item.note}"</Text>
+          <View className="mt-3 pl-3" style={{ borderLeftWidth: 2, borderLeftColor: '#e5e7eb' }}>
+            <Text className="text-gray-600 italic">"{item.note}"</Text>
+          </View>
         )}
       </View>
     );
@@ -97,9 +184,48 @@ export default function HistoryScreen() {
         </Text>
       </View>
 
-      <FlatList
-        data={checks}
+      {/* Filter Chips */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        className="px-4 mb-4"
+        contentContainerStyle={{ gap: 8 }}
+      >
+        {[
+          { key: 'all', label: 'All' },
+          { key: 'great', label: 'Great (80+)' },
+          { key: 'good', label: 'Good (60+)' },
+          { key: 'low', label: 'Low (<40)' },
+        ].map((filter) => (
+          <Pressable
+            key={filter.key}
+            onPress={() => {
+              setScoreFilter(filter.key);
+              hapticSelection();
+            }}
+            className={`rounded-full px-4 py-2 ${
+              scoreFilter === filter.key
+                ? 'bg-primary-600'
+                : 'bg-gray-100'
+            }`}
+          >
+            <Text
+              className={`text-sm font-medium ${
+                scoreFilter === filter.key
+                  ? 'text-white'
+                  : 'text-gray-700'
+              }`}
+            >
+              {filter.label}
+            </Text>
+          </Pressable>
+        ))}
+      </ScrollView>
+
+      <SectionList
+        sections={groupByMonth(filteredChecks)}
         renderItem={renderItem}
+        renderSectionHeader={renderSectionHeader}
         keyExtractor={(item) => item.id}
         refreshControl={
           <RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} />
@@ -108,6 +234,36 @@ export default function HistoryScreen() {
           if (checks.length < total) loadHistory();
         }}
         onEndReachedThreshold={0.5}
+        ListHeaderComponent={
+          checks.length > 0 ? (
+            <View className="mx-4 mb-4 rounded-2xl bg-white p-4 shadow-sm">
+              <Text className="text-base font-semibold text-gray-900">This Week</Text>
+              <View className="flex-row items-end justify-between mt-3" style={{ height: 60 }}>
+                {getWeeklyData().map((item, index) => (
+                  <View key={index} className="items-center" style={{ width: 32 }}>
+                    <View
+                      style={{
+                        width: 32,
+                        height: item.score !== null ? (item.score / 100) * 60 : 20,
+                        backgroundColor: item.color,
+                        borderTopLeftRadius: 8,
+                        borderTopRightRadius: 8,
+                        opacity: item.score !== null ? 1 : 0.3,
+                      }}
+                    />
+                  </View>
+                ))}
+              </View>
+              <View className="flex-row justify-between mt-2">
+                {getWeeklyData().map((item, index) => (
+                  <Text key={index} className="text-xs text-gray-400 text-center" style={{ width: 32 }}>
+                    {item.day}
+                  </Text>
+                ))}
+              </View>
+            </View>
+          ) : null
+        }
         ListEmptyComponent={
           !isLoading ? (
             <View className="flex-1 items-center justify-center py-20">
@@ -118,6 +274,7 @@ export default function HistoryScreen() {
           ) : null
         }
         contentContainerStyle={{ paddingBottom: 100 }}
+        stickySectionHeadersEnabled={false}
       />
     </SafeAreaView>
   );
