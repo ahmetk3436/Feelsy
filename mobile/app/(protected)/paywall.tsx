@@ -50,7 +50,7 @@ export default function PaywallScreen() {
   if (isLoading) {
     return (
       <SafeAreaView className="flex-1 items-center justify-center bg-white">
-        <ActivityIndicator size="large" color="#2563eb" />
+        <ActivityIndicator size="large" color="#8b5cf6" />
       </SafeAreaView>
     );
   }
@@ -60,8 +60,8 @@ export default function PaywallScreen() {
       <ScrollView className="flex-1">
         {/* Header */}
         <View className="items-center border-b border-gray-100 px-6 pb-6 pt-8">
-          <View className="mb-4 h-16 w-16 items-center justify-center rounded-full bg-blue-100">
-            <Ionicons name="diamond-outline" size={32} color="#2563eb" />
+          <View className="mb-4 h-16 w-16 items-center justify-center rounded-full bg-primary-100">
+            <Ionicons name="diamond-outline" size={32} color="#8b5cf6" />
           </View>
           <Text className="mb-2 text-3xl font-bold text-gray-900">
             Upgrade to Premium
@@ -95,22 +95,22 @@ export default function PaywallScreen() {
               <Text className="mb-2 text-sm text-gray-500">
                 {pkg.product.description}
               </Text>
-              <Text className="text-2xl font-bold text-blue-600">
+              <Text className="text-2xl font-bold text-primary-600">
                 {pkg.product.priceString}
               </Text>
             </View>
             {purchasing === pkg.identifier && (
-              <ActivityIndicator color="#2563eb" style={{ marginLeft: 16 }} />
+              <ActivityIndicator color="#8b5cf6" style={{ marginLeft: 16 }} />
             )}
           </TouchableOpacity>
         ))}
 
         {/* Restore */}
         <TouchableOpacity
-          className="mx-6 mt-2 items-center rounded-xl border border-blue-600 p-4"
+          className="mx-6 mt-2 items-center rounded-xl border border-primary-600 p-4"
           onPress={handleRestorePurchases}
         >
-          <Text className="text-base font-semibold text-blue-600">
+          <Text className="text-base font-semibold text-primary-600">
             Restore Purchases
           </Text>
         </TouchableOpacity>

@@ -28,13 +28,13 @@
       "id": "enhance_003",
       "title": "Add 3-screen onboarding flow with guest mode",
       "description": "The app has NO onboarding and NO guest mode. index.tsx redirects directly to login or protected. Apple Guideline 5.1.1v requires apps to function without login for basic features. The system requirements specify a 3-screen onboarding and guest mode with 3 free uses.\n\nCreate file: mobile/app/onboarding.tsx — Three-page onboarding with horizontal ScrollView (pagingEnabled, horizontal, showsHorizontalScrollIndicator=false):\n- Page 1: Welcome — Large emoji '💜', title 'Welcome to Feelsy' (text-3xl font-bold text-gray-900), subtitle 'Track your daily moods and vibes' (text-base text-gray-500)\n- Page 2: Features — Emoji '📊', title 'Understand Your Feelings', subtitle 'See patterns in your mood over time with daily check-ins'\n- Page 3: CTA — Emoji '✨', title 'Ready to Start?', two buttons: Button title='Try Free' variant='primary' size='lg' onPress =\u003e save onboarding_complete to AsyncStorage, navigate to /(protected)/home as guest. Second button below: Button title='Sign In' variant='outline' size='lg' onPress =\u003e save onboarding_complete, navigate to /(auth)/login\n- Each page: View className='flex-1 items-center justify-center px-8' with Dimensions.get('window').width for page sizing\n- Page indicator dots at bottom: 3 View circles, active one bg-primary-600 w-3 h-3, inactive bg-gray-300 w-2 h-2, all rounded-full\n- Track active page via onMomentumScrollEnd calculating page index\n- Import AsyncStorage from expo-secure-store (use SecureStore.setItemAsync for 'onboarding_complete')\n\nModify file: mobile/app/index.tsx — Update routing logic:\n- Import * as SecureStore from 'expo-secure-store'\n- Add state: hasOnboarded (null initially), isGuest (false)\n- In useEffect: check SecureStore for 'onboarding_complete'. If not found, redirect to /onboarding. If found and not authenticated, check SecureStore for 'guest_uses' — if exists and \u003c 3, redirect to /(protected)/home. Otherwise redirect to /(auth)/login\n- Keep existing auth check\n\nModify file: mobile/app/(auth)/login.tsx — Add guest option:\n- Below the 'Don't have an account?' section, add a Pressable with Text 'Skip for now' className='text-gray-400 text-sm mt-4 text-center' that saves 'guest_uses' = '0' to SecureStore and navigates to /(protected)/home\n\nModify file: mobile/contexts/AuthContext.tsx — Add isGuest state:\n- Add isGuest boolean to AuthContextType and state\n- In restore(), if no token found, check SecureStore for 'guest_uses'. If exists and \u003c 3, setIsGuest(true) but keep isAuthenticated false\n- Export isGuest from context\n\nModify file: mobile/app/(protected)/_layout.tsx — Allow guest access:\n- Destructure isGuest from useAuth()\n- Change redirect condition: if (!isAuthenticated \u0026\u0026 !isGuest) redirect to login",
-      "status": "in_progress",
+      "status": "completed",
       "priority": 8,
       "depends_on": [],
       "test_command": "cd mobile \u0026\u0026 npx tsc --noEmit",
       "auto_commit": true,
       "created_at": "",
-      "updated_at": "2026-02-06T18:49:58Z"
+      "updated_at": "2026-02-06T18:54:58Z"
     },
     {
       "id": "enhance_004",
@@ -92,13 +92,13 @@
       "id": "enhance_008",
       "title": "Update primary theme to purple and fix color inconsistencies",
       "description": "The app has a color identity crisis: tailwind.config.js defines primary as blue (#2563eb), but the protected layout tab bar uses purple (#8b5cf6), the FeelCheck model returns purple for low scores, the vibes section uses purple gradients, and the app name 'Feelsy' with its emotional wellness theme strongly aligns with purple. This inconsistency must be resolved.\n\nModify file: mobile/tailwind.config.js — Replace the primary color palette from blue to purple:\n  primary: {\n    50: '#faf5ff',\n    100: '#f3e8ff',\n    200: '#e9d5ff',\n    300: '#d8b4fe',\n    400: '#c084fc',\n    500: '#a855f7',\n    600: '#8b5cf6',\n    700: '#7c3aed',\n    800: '#6d28d9',\n    900: '#5b21b6',\n  }\n\nModify file: mobile/app/index.tsx — Change ActivityIndicator color from '#2563eb' to '#8b5cf6'\n\nModify file: mobile/app/(protected)/paywall.tsx:\n- Line 54: Change ActivityIndicator color from '#2563eb' to '#8b5cf6'\n- Line 64: Change icon bg from bg-blue-100 to bg-primary-100, icon color from '#2563eb' to '#8b5cf6'\n- Line 98: Change price text from text-blue-600 to text-primary-600\n- Line 103: Change ActivityIndicator color from '#2563eb' to '#8b5cf6'\n- Line 113: Change border and text from border-blue-600/text-blue-600 to border-primary-600/text-primary-600\n\nModify file: mobile/components/ui/Button.tsx — Line 67: Change ActivityIndicator outline color from '#2563eb' to '#8b5cf6'\n\nModify file: mobile/app/(protected)/settings.tsx — Line 103: Switch trackColor already being fixed in enhance_002\n\nThis creates a consistent purple-first brand identity throughout the entire app that matches the emotional wellness theme and the existing tab bar accent color.",
-      "status": "pending",
+      "status": "in_progress",
       "priority": 8,
       "depends_on": [],
       "test_command": "cd mobile \u0026\u0026 npx tsc --noEmit",
       "auto_commit": true,
       "created_at": "",
-      "updated_at": ""
+      "updated_at": "2026-02-06T18:54:58Z"
     },
     {
       "id": "enhance_009",

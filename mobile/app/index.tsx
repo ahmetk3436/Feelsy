@@ -19,7 +19,7 @@ export default function Index() {
   if (isLoading || hasOnboarded === null) {
     return (
       <View className="flex-1 items-center justify-center bg-white">
-        <ActivityIndicator size="large" color="#2563eb" />
+        <ActivityIndicator size="large" color="#8b5cf6" />
       </View>
     );
   }
