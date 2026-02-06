@@ -4,25 +4,25 @@
       "id": "enhance_001",
       "title": "Add friend request endpoints and management API",
       "description": "The backend has a FeelFriend model with user_id, friend_id, and status (pending/accepted/blocked) but NO API endpoints exist to send, accept, reject, or list friend requests. The friends screen calls GET /feels/friends which returns friend feels but users have no way to actually ADD friends. Without this, the social feature is completely non-functional.\n\nModify file: backend/internal/dto/feel_dto.go — Add new DTOs:\n- SendFriendRequestRequest: struct with friend_email string json:\"friend_email\" validate:\"required,email\"\n- FriendRequestResponse: struct with id, user_id, friend_id, status, friend_email, created_at\n- AcceptFriendRequest: struct with request_id string json:\"request_id\"\n\nModify file: backend/internal/services/feel_service.go — Add methods:\n- SendFriendRequest(userID uuid.UUID, friendEmail string) (*models.FeelFriend, error) — look up friend by email, check not self, check no existing request, create with status=pending\n- AcceptFriendRequest(userID, requestID uuid.UUID) error — verify requestID exists with friend_id=userID and status=pending, update status to accepted\n- RejectFriendRequest(userID, requestID uuid.UUID) error — verify and delete the record\n- ListFriendRequests(userID uuid.UUID) ([]models.FeelFriend, error) — return pending requests where friend_id=userID, preload User\n- ListFriends(userID uuid.UUID) ([]models.FeelFriend, error) — return accepted friends where user_id=userID OR friend_id=userID, preload User and Friend\n- RemoveFriend(userID, friendID uuid.UUID) error — delete FeelFriend record\n\nModify file: backend/internal/handlers/feel_handler.go — Add handlers:\n- SendFriendRequest(c *fiber.Ctx) — parse email from body, call service, return 201\n- AcceptFriendRequest(c *fiber.Ctx) — parse request_id from URL param :id, call service\n- RejectFriendRequest(c *fiber.Ctx) — parse :id, call service\n- ListFriendRequests(c *fiber.Ctx) — call service, return {data: [...]}\n- ListFriends(c *fiber.Ctx) — call service, return {data: [...]}\n- RemoveFriend(c *fiber.Ctx) — parse :id from URL, call service\n\nModify file: backend/internal/routes/routes.go — Add routes under feels group:\n- feels.Post(\"/friends\", feelHandler.SendFriendRequest)\n- feels.Get(\"/friends/requests\", feelHandler.ListFriendRequests)\n- feels.Get(\"/friends/list\", feelHandler.ListFriends)\n- feels.Put(\"/friends/:id/accept\", feelHandler.AcceptFriendRequest)\n- feels.Delete(\"/friends/:id/reject\", feelHandler.RejectFriendRequest)\n- feels.Delete(\"/friends/:id\", feelHandler.RemoveFriend)\n\nAlso fix GetFriendFeels in feel_service.go line 278: change \"email\" key to \"name\" key using user.Email (the friends.tsx expects field name 'name' not 'email').",
-      "status": "in_progress",
+      "status": "completed",
       "priority": 10,
       "depends_on": [],
       "test_command": "cd backend \u0026\u0026 go build ./...",
       "auto_commit": true,
       "created_at": "",
-      "updated_at": "2026-02-06T18:37:41Z"
+      "updated_at": "2026-02-06T18:42:04Z"
     },
     {
       "id": "enhance_002",
       "title": "Fix restore purchases mock and biometric persistence in settings",
       "description": "CRITICAL MOCK DETECTED: In mobile/app/(protected)/settings.tsx lines 62-67, handleRestorePurchases is a STUB that just shows Alert.alert('Restore Purchases', 'Checking for previous purchases...') instead of actually calling RevenueCat. This WILL cause App Store rejection under Guideline 3.1.\n\nAlso: The biometric toggle (biometricEnabled state on line 14) is local React state that resets on every app launch — it's never persisted to SecureStore.\n\nModify file: mobile/app/(protected)/settings.tsx:\n\n1. Fix Restore Purchases (replace lines 62-67):\n- Import useSubscription from '../../contexts/SubscriptionContext'\n- Destructure { handleRestore } from useSubscription()\n- Replace handleRestorePurchases with async function that calls handleRestore(), shows success/failure Alert, and triggers hapticSuccess or hapticError accordingly:\n  const handleRestorePurchases = async () =\u003e {\n    hapticMedium();\n    try {\n      const success = await handleRestore();\n      if (success) {\n        hapticSuccess();\n        Alert.alert('Restored', 'Your purchases have been restored!');\n      } else {\n        Alert.alert('Not Found', 'No previous purchases found.');\n      }\n    } catch { Alert.alert('Error', 'Failed to restore purchases.'); }\n  };\n- Import hapticSuccess from haptics (add to existing import)\n\n2. Fix Biometric Persistence:\n- Import * as SecureStore from 'expo-secure-store' at top\n- Add BIOMETRIC_KEY constant = 'biometric_enabled'\n- In useEffect, after checking biometric availability, also load: const saved = await SecureStore.getItemAsync(BIOMETRIC_KEY); if (saved === 'true') setBiometricEnabled(true);\n- Replace direct setBiometricEnabled on Switch onValueChange with: const toggleBiometric = async (val: boolean) =\u003e { setBiometricEnabled(val); await SecureStore.setItemAsync(BIOMETRIC_KEY, val ? 'true' : 'false'); }\n- Update Switch onValueChange={toggleBiometric}\n- Change Switch trackColor true value from '#2563eb' to '#8b5cf6' to match app's purple theme used in protected layout",
-      "status": "pending",
+      "status": "in_progress",
       "priority": 9,
       "depends_on": [],
       "test_command": "cd mobile \u0026\u0026 npx tsc --noEmit",
       "auto_commit": true,
       "created_at": "",
-      "updated_at": ""
+      "updated_at": "2026-02-06T18:42:04Z"
     },
     {
       "id": "enhance_003",

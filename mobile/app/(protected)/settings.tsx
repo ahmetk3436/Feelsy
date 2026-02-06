@@ -1,15 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, Pressable, Alert, Switch } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as SecureStore from 'expo-secure-store';
 import { useAuth } from '../../contexts/AuthContext';
+import { useSubscription } from '../../contexts/SubscriptionContext';
 import { isBiometricAvailable, getBiometricType } from '../../lib/biometrics';
-import { hapticWarning, hapticMedium } from '../../lib/haptics';
+import { hapticWarning, hapticMedium, hapticSuccess, hapticError } from '../../lib/haptics';
 import Button from '../../components/ui/Button';
 import Modal from '../../components/ui/Modal';
 import Input from '../../components/ui/Input';
 
+const BIOMETRIC_KEY = 'biometric_enabled';
+
 export default function SettingsScreen() {
   const { user, logout, deleteAccount } = useAuth();
+  const { handleRestore } = useSubscription();
   const [biometricType, setBiometricType] = useState<string | null>(null);
   const [biometricEnabled, setBiometricEnabled] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -22,10 +27,19 @@ export default function SettingsScreen() {
       if (available) {
         const type = await getBiometricType();
         setBiometricType(type);
+        const saved = await SecureStore.getItemAsync(BIOMETRIC_KEY);
+        if (saved === 'true') {
+          setBiometricEnabled(true);
+        }
       }
     };
     checkBiometrics();
   }, []);
+
+  const toggleBiometric = async (val: boolean) => {
+    setBiometricEnabled(val);
+    await SecureStore.setItemAsync(BIOMETRIC_KEY, val ? 'true' : 'false');
+  };
 
   const handleDeleteAccount = async () => {
     setIsDeleting(true);
@@ -59,11 +73,20 @@ export default function SettingsScreen() {
   };
 
   // Restore Purchases (Guideline 3.1 — required on every paywall)
-  const handleRestorePurchases = () => {
+  const handleRestorePurchases = async () => {
     hapticMedium();
-    // In production, call RevenueCat's restorePurchases method:
-    // await Purchases.restorePurchases();
-    Alert.alert('Restore Purchases', 'Checking for previous purchases...');
+    try {
+      const success = await handleRestore();
+      if (success) {
+        hapticSuccess();
+        Alert.alert('Restored', 'Your purchases have been restored!');
+      } else {
+        Alert.alert('Not Found', 'No previous purchases found.');
+      }
+    } catch {
+      hapticError();
+      Alert.alert('Error', 'Failed to restore purchases.');
+    }
   };
 
   return (
@@ -99,8 +122,8 @@ export default function SettingsScreen() {
               </View>
               <Switch
                 value={biometricEnabled}
-                onValueChange={setBiometricEnabled}
-                trackColor={{ true: '#2563eb' }}
+                onValueChange={toggleBiometric}
+                trackColor={{ true: '#8b5cf6' }}
               />
             </View>
           )}
