@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
-import { View, Text, KeyboardAvoidingView, Platform } from 'react-native';
-import { Link } from 'expo-router';
+import { View, Text, KeyboardAvoidingView, Platform, Pressable } from 'react-native';
+import { Link, useRouter } from 'expo-router';
+import * as SecureStore from 'expo-secure-store';
 import { useAuth } from '../../contexts/AuthContext';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
 import AppleSignInButton from '../../components/ui/AppleSignInButton';
+import { hapticLight } from '../../lib/haptics';
 
 export default function LoginScreen() {
   const { login } = useAuth();
@@ -12,6 +14,7 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const router = useRouter();
 
   const handleLogin = async () => {
     setError('');
@@ -30,6 +33,13 @@ export default function LoginScreen() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleSkip = async () => {
+    hapticLight();
+    await SecureStore.setItemAsync('onboarding_complete', 'true');
+    await SecureStore.setItemAsync('guest_uses', '0');
+    router.replace('/(protected)/home');
   };
 
   return (
@@ -90,6 +100,12 @@ export default function LoginScreen() {
             <Text className="font-semibold text-primary-600">Sign Up</Text>
           </Link>
         </View>
+
+        <Pressable onPress={handleSkip} className="mt-4">
+          <Text className="text-sm text-gray-400 text-center">
+            Skip for now
+          </Text>
+        </Pressable>
       </View>
     </KeyboardAvoidingView>
   );

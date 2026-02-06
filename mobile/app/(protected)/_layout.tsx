@@ -6,7 +6,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { hapticSelection } from '../../lib/haptics';
 
 export default function ProtectedLayout() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isGuest, isLoading } = useAuth();
 
   if (isLoading) {
     return (
@@ -16,7 +16,7 @@ export default function ProtectedLayout() {
     );
   }
 
-  if (!isAuthenticated) {
+  if (!isAuthenticated && !isGuest) {
     return <Redirect href="/(auth)/login" />;
   }
 

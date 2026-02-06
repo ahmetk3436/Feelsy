@@ -13,10 +13,12 @@ import {
   getRefreshToken,
 } from '../lib/storage';
 import { hapticSuccess, hapticError } from '../lib/haptics';
+import * as SecureStore from 'expo-secure-store';
 import type { User, AuthResponse } from '../types/auth';
 
 interface AuthContextType {
   isAuthenticated: boolean;
+  isGuest: boolean;
   isLoading: boolean;
   user: User | null;
   login: (email: string, password: string) => Promise<void>;
@@ -31,6 +33,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isGuest, setIsGuest] = useState(false);
 
   const isAuthenticated = user !== null;
 
@@ -44,6 +47,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (data.status === 'ok') {
             const payload = JSON.parse(atob(token.split('.')[1]));
             setUser({ id: payload.sub, email: payload.email });
+          }
+        } else {
+          const guestUses = await SecureStore.getItemAsync('guest_uses');
+          if (guestUses !== null && parseInt(guestUses, 10) < 3) {
+            setIsGuest(true);
           }
         }
       } catch {
@@ -137,6 +145,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     <AuthContext.Provider
       value={{
         isAuthenticated,
+        isGuest,
         isLoading,
         user,
         login,
