@@ -9,6 +9,7 @@ import (
 	"github.com/ahmetcoskunkizilkaya/feelsy/backend/internal/dto"
 	"github.com/ahmetcoskunkizilkaya/feelsy/backend/internal/models"
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 	"gorm.io/gorm"
 )
 
@@ -162,7 +163,7 @@ func (s *FeelService) UpdateStreak(userID uuid.UUID) error {
 			LongestStreak:  1,
 			TotalCheckIns:  1,
 			LastCheckDate:  &today,
-			UnlockedBadges: models.StringArray{},
+			UnlockedBadges: pq.StringArray{},
 		}
 		return s.db.Create(&streak).Error
 	}
@@ -203,7 +204,7 @@ func (s *FeelService) UpdateStreak(userID uuid.UUID) error {
 	return s.db.Save(&streak).Error
 }
 
-func (s *FeelService) checkBadgeUnlocks(streak, total int, current models.StringArray) models.StringArray {
+func (s *FeelService) checkBadgeUnlocks(streak, total int, current pq.StringArray) pq.StringArray {
 	badges := make(map[string]bool)
 	for _, b := range current {
 		badges[b] = true
@@ -234,7 +235,7 @@ func (s *FeelService) checkBadgeUnlocks(streak, total int, current models.String
 		badges["total_100"] = true
 	}
 
-	result := make(models.StringArray, 0, len(badges))
+	result := make(pq.StringArray, 0, len(badges))
 	for badge := range badges {
 		result = append(result, badge)
 	}
