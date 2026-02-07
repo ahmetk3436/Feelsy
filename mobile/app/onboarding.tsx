@@ -2,18 +2,20 @@ import React, { useState, useRef } from 'react';
 import { View, Text, ScrollView, Dimensions, NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import * as SecureStore from 'expo-secure-store';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuth } from '../contexts/AuthContext';
 import Button from '../components/ui/Button';
 import { hapticSuccess, hapticLight } from '../lib/haptics';
 
 export default function OnboardingScreen() {
   const router = useRouter();
+  const { continueAsGuest } = useAuth();
   const { width } = Dimensions.get('window');
   const [activePage, setActivePage] = useState(0);
   const scrollRef = useRef<ScrollView>(null);
 
   const pages = [
-    { emoji: '💜', title: 'Welcome to Feelsy', subtitle: 'Track your daily moods and vibes' },
+    { emoji: '💗', title: 'Welcome to Feelsy', subtitle: 'Track your daily moods and vibes' },
     { emoji: '📊', title: 'Understand Your Feelings', subtitle: 'See patterns in your mood over time with daily check-ins' },
     { emoji: '✨', title: 'Ready to Start?', subtitle: 'Start tracking for free or sign in to sync across devices' },
   ];
@@ -25,20 +27,20 @@ export default function OnboardingScreen() {
   };
 
   const handleTryFree = async () => {
-    await SecureStore.setItemAsync('onboarding_complete', 'true');
-    await SecureStore.setItemAsync('guest_uses', '0');
+    await AsyncStorage.setItem('onboarding_complete', 'true');
+    await continueAsGuest();
     hapticSuccess();
     router.replace('/(protected)/home');
   };
 
   const handleSignIn = async () => {
-    await SecureStore.setItemAsync('onboarding_complete', 'true');
+    await AsyncStorage.setItem('onboarding_complete', 'true');
     hapticSuccess();
     router.replace('/(auth)/login');
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-white">
+    <SafeAreaView className="flex-1 bg-gray-950">
       <ScrollView
         ref={scrollRef}
         horizontal={true}
@@ -49,8 +51,8 @@ export default function OnboardingScreen() {
         {pages.map((page, index) => (
           <View key={index} style={{ width }} className="flex-1 items-center justify-center px-8">
             <Text className="text-6xl mb-6">{page.emoji}</Text>
-            <Text className="text-3xl font-bold text-gray-900 text-center mb-3">{page.title}</Text>
-            <Text className="text-base text-gray-500 text-center leading-6">{page.subtitle}</Text>
+            <Text className="text-3xl font-bold text-white text-center mb-3">{page.title}</Text>
+            <Text className="text-base text-gray-400 text-center leading-6">{page.subtitle}</Text>
             {index === 2 && (
               <View className="mt-10 w-full">
                 <Button title="Try Free" variant="primary" size="lg" onPress={handleTryFree} />
@@ -68,8 +70,8 @@ export default function OnboardingScreen() {
             key={index}
             className={
               index === activePage
-                ? 'w-3 h-3 rounded-full bg-primary-600'
-                : 'w-2 h-2 rounded-full bg-gray-300'
+                ? 'w-3 h-3 rounded-full bg-rose-500'
+                : 'w-2 h-2 rounded-full bg-gray-600'
             }
           />
         ))}

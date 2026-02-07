@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, KeyboardAvoidingView, Platform, Pressable, Alert } from 'react-native';
 import { Link, useRouter } from 'expo-router';
-import * as SecureStore from 'expo-secure-store';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../../contexts/AuthContext';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
@@ -9,7 +9,7 @@ import AppleSignInButton from '../../components/ui/AppleSignInButton';
 import { hapticLight } from '../../lib/haptics';
 
 export default function LoginScreen() {
-  const { login } = useAuth();
+  const { login, continueAsGuest } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -35,33 +35,33 @@ export default function LoginScreen() {
     }
   };
 
-  const handleSkip = async () => {
+  const handleTryWithoutAccount = async () => {
     hapticLight();
-    await SecureStore.setItemAsync('onboarding_complete', 'true');
-    await SecureStore.setItemAsync('guest_uses', '0');
+    await AsyncStorage.setItem('onboarding_complete', 'true');
+    await continueAsGuest();
     router.replace('/(protected)/home');
   };
 
   return (
     <KeyboardAvoidingView
-      className="flex-1 bg-white"
+      className="flex-1 bg-gray-950"
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <View className="flex-1 justify-center px-8">
         <View className="items-center mb-6">
-          <Text className="text-6xl">💜</Text>
-          <Text className="text-2xl font-bold text-primary-600">Feelsy</Text>
+          <Text className="text-6xl">💗</Text>
+          <Text className="text-2xl font-bold text-rose-500">Feelsy</Text>
         </View>
-        <Text className="mb-2 text-3xl font-bold text-gray-900">
+        <Text className="mb-2 text-3xl font-bold text-white">
           Welcome back
         </Text>
-        <Text className="mb-8 text-base text-gray-500">
+        <Text className="mb-8 text-base text-gray-400">
           Check in with your feelings
         </Text>
 
         {error ? (
-          <View className="mb-4 rounded-lg bg-red-50 p-3">
-            <Text className="text-sm text-red-600">{error}</Text>
+          <View className="mb-4 rounded-lg bg-red-900/40 p-3 border border-red-800">
+            <Text className="text-sm text-red-400">{error}</Text>
           </View>
         ) : null}
 
@@ -97,7 +97,7 @@ export default function LoginScreen() {
             );
           }}
         >
-          <Text className="text-right text-sm text-primary-600 mb-4">
+          <Text className="text-right text-sm text-rose-500 mb-4">
             Forgot Password?
           </Text>
         </Pressable>
@@ -109,19 +109,19 @@ export default function LoginScreen() {
           size="lg"
         />
 
-        {/* Sign in with Apple — equal visual prominence (Guideline 4.8) */}
+        {/* Sign in with Apple -- equal visual prominence (Guideline 4.8) */}
         <AppleSignInButton onError={(msg) => setError(msg)} />
 
         <View className="mt-6 flex-row items-center justify-center">
-          <Text className="text-gray-500">Don't have an account? </Text>
+          <Text className="text-gray-400">Don't have an account? </Text>
           <Link href="/(auth)/register" asChild>
-            <Text className="font-semibold text-primary-600">Sign Up</Text>
+            <Text className="font-semibold text-rose-500">Sign Up</Text>
           </Link>
         </View>
 
-        <Pressable onPress={handleSkip} className="mt-4">
-          <Text className="text-sm text-gray-400 text-center">
-            Skip for now
+        <Pressable onPress={handleTryWithoutAccount} className="mt-4">
+          <Text className="text-sm text-gray-500 text-center">
+            Try Without Account
           </Text>
         </Pressable>
       </View>

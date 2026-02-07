@@ -105,7 +105,7 @@ export default function HistoryScreen() {
       result.push({
         day: dayLabel,
         score: match ? match.feel_score : null,
-        color: match ? getColorForScore(match.feel_score) : '#d1d5db',
+        color: match ? getColorForScore(match.feel_score) : '#374151',
       });
     }
 
@@ -114,8 +114,8 @@ export default function HistoryScreen() {
 
   const renderSectionHeader = ({ section }: { section: { title: string; data: FeelCheck[] } }) => (
     <View className="px-4 pt-6 pb-2">
-      <Text className="text-lg font-bold text-gray-900">{section.title}</Text>
-      <Text className="text-sm text-gray-500">
+      <Text className="text-lg font-bold text-white">{section.title}</Text>
+      <Text className="text-sm text-gray-400">
         {section.data.length} check-in{section.data.length !== 1 ? 's' : ''}
       </Text>
     </View>
@@ -125,7 +125,7 @@ export default function HistoryScreen() {
     const color = getColorForScore(item.feel_score);
     return (
       <View
-        className="mx-4 mb-3 rounded-2xl bg-white p-4 shadow-sm"
+        className="mx-4 mb-3 rounded-2xl bg-gray-900 p-4 border border-gray-800"
         style={{ borderLeftWidth: 4, borderLeftColor: color }}
       >
         <View className="flex-row items-center justify-between">
@@ -143,14 +143,14 @@ export default function HistoryScreen() {
               <Text className="text-2xl">{item.mood_emoji || '😊'}</Text>
             </View>
             <View className="ml-3">
-              <Text className="text-lg font-semibold text-gray-900">
+              <Text className="text-lg font-semibold text-white">
                 {getFeelLabel(item.feel_score)}
               </Text>
-              <Text className="text-sm text-gray-500">
+              <Text className="text-sm text-gray-400">
                 {formatDate(item.check_date)}
               </Text>
               {item.created_at && (
-                <Text className="text-xs text-gray-400">
+                <Text className="text-xs text-gray-500">
                   {formatTime(item.created_at)}
                 </Text>
               )}
@@ -161,14 +161,14 @@ export default function HistoryScreen() {
               {item.feel_score}
             </Text>
             <View className="flex-row gap-2 mt-1">
-              <Text className="text-xs text-gray-400">M:{item.mood_score}</Text>
-              <Text className="text-xs text-gray-400">E:{item.energy_score}</Text>
+              <Text className="text-xs text-gray-500">M:{item.mood_score}</Text>
+              <Text className="text-xs text-gray-500">E:{item.energy_score}</Text>
             </View>
           </View>
         </View>
         {item.note && (
-          <View className="mt-3 pl-3" style={{ borderLeftWidth: 2, borderLeftColor: '#e5e7eb' }}>
-            <Text className="text-gray-600 italic">"{item.note}"</Text>
+          <View className="mt-3 pl-3" style={{ borderLeftWidth: 2, borderLeftColor: '#374151' }}>
+            <Text className="text-gray-300 italic">"{item.note}"</Text>
           </View>
         )}
       </View>
@@ -176,10 +176,10 @@ export default function HistoryScreen() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-gray-50">
+    <SafeAreaView className="flex-1 bg-gray-950">
       <View className="px-6 pt-8 pb-4">
-        <Text className="text-3xl font-bold text-gray-900">History</Text>
-        <Text className="mt-1 text-base text-gray-500">
+        <Text className="text-3xl font-bold text-white">History</Text>
+        <Text className="mt-1 text-base text-gray-400">
           {total} total check-ins
         </Text>
       </View>
@@ -205,15 +205,15 @@ export default function HistoryScreen() {
             }}
             className={`rounded-full px-4 py-2 ${
               scoreFilter === filter.key
-                ? 'bg-primary-600'
-                : 'bg-gray-100'
+                ? 'bg-rose-500'
+                : 'bg-gray-800'
             }`}
           >
             <Text
               className={`text-sm font-medium ${
                 scoreFilter === filter.key
                   ? 'text-white'
-                  : 'text-gray-700'
+                  : 'text-gray-300'
               }`}
             >
               {filter.label}
@@ -228,7 +228,7 @@ export default function HistoryScreen() {
         renderSectionHeader={renderSectionHeader}
         keyExtractor={(item) => item.id}
         refreshControl={
-          <RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} />
+          <RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} tintColor="#f43f5e" />
         }
         onEndReached={() => {
           if (checks.length < total) loadHistory();
@@ -236,8 +236,8 @@ export default function HistoryScreen() {
         onEndReachedThreshold={0.5}
         ListHeaderComponent={
           checks.length > 0 ? (
-            <View className="mx-4 mb-4 rounded-2xl bg-white p-4 shadow-sm">
-              <Text className="text-base font-semibold text-gray-900">This Week</Text>
+            <View className="mx-4 mb-4 rounded-2xl bg-gray-900 p-4 border border-gray-800">
+              <Text className="text-base font-semibold text-white">This Week</Text>
               <View className="flex-row items-end justify-between mt-3" style={{ height: 60 }}>
                 {getWeeklyData().map((item, index) => (
                   <View key={index} className="items-center" style={{ width: 32 }}>
@@ -256,7 +256,7 @@ export default function HistoryScreen() {
               </View>
               <View className="flex-row justify-between mt-2">
                 {getWeeklyData().map((item, index) => (
-                  <Text key={index} className="text-xs text-gray-400 text-center" style={{ width: 32 }}>
+                  <Text key={index} className="text-xs text-gray-500 text-center" style={{ width: 32 }}>
                     {item.day}
                   </Text>
                 ))}
@@ -268,8 +268,8 @@ export default function HistoryScreen() {
           !isLoading ? (
             <View className="flex-1 items-center justify-center py-20">
               <Text className="text-6xl mb-4">📝</Text>
-              <Text className="text-lg font-semibold text-gray-900">No check-ins yet</Text>
-              <Text className="text-gray-500 mt-2">Start tracking your feels!</Text>
+              <Text className="text-lg font-semibold text-white">No check-ins yet</Text>
+              <Text className="text-gray-400 mt-2">Start tracking your feels!</Text>
             </View>
           ) : null
         }

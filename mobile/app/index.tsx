@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, ActivityIndicator } from 'react-native';
 import { Redirect } from 'expo-router';
-import * as SecureStore from 'expo-secure-store';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function Index() {
@@ -10,7 +10,7 @@ export default function Index() {
 
   useEffect(() => {
     const checkOnboarding = async () => {
-      const value = await SecureStore.getItemAsync('onboarding_complete');
+      const value = await AsyncStorage.getItem('onboarding_complete');
       setHasOnboarded(value === 'true');
     };
     checkOnboarding();
@@ -18,8 +18,8 @@ export default function Index() {
 
   if (isLoading || hasOnboarded === null) {
     return (
-      <View className="flex-1 items-center justify-center bg-white">
-        <ActivityIndicator size="large" color="#8b5cf6" />
+      <View className="flex-1 items-center justify-center bg-gray-950">
+        <ActivityIndicator size="large" color="#f43f5e" />
       </View>
     );
   }

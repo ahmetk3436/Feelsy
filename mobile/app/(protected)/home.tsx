@@ -73,14 +73,14 @@ export default function HomeScreen() {
     try {
       const label = getFeelLabel(todayCheck.feel_score);
       const filled = Math.floor(todayCheck.feel_score / 10);
-      const bar = '█'.repeat(filled) + '░'.repeat(10 - filled);
+      const bar = '\u2588'.repeat(filled) + '\u2591'.repeat(10 - filled);
       const message = `${todayCheck.mood_emoji} My Feelsy Check-In\n\n` +
-        `Score: ${todayCheck.feel_score}/100 — ${label}\n` +
+        `Score: ${todayCheck.feel_score}/100 -- ${label}\n` +
         `${bar}\n\n` +
         `Mood: ${todayCheck.mood_score} | Energy: ${todayCheck.energy_score}\n` +
         (todayCheck.note ? `"${todayCheck.note}"\n\n` : '\n') +
-        `🔥 ${stats?.current_streak || 0} day streak\n\n` +
-        `Track your vibes → Feelsy App`;
+        `${stats?.current_streak || 0} day streak\n\n` +
+        `Track your vibes -> Feelsy App`;
       await Share.share({ message });
     } catch (error) {
       console.log('Share error:', error);
@@ -91,22 +91,21 @@ export default function HomeScreen() {
   const feelColor = getColorForScore(feelScore);
 
   return (
-    <SafeAreaView className="flex-1 bg-gray-50">
+    <SafeAreaView className="flex-1 bg-gray-950">
       <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 100 }}>
         <View className="px-6 pt-8">
           {/* Header */}
-          <Text className="text-3xl font-bold text-gray-900">
+          <Text className="text-3xl font-bold text-white">
             Hey there
           </Text>
-          <Text className="mt-1 text-base text-gray-500">
+          <Text className="mt-1 text-base text-gray-400">
             How are you feeling today?
           </Text>
 
           {/* Today's Check-in Card */}
           {todayCheck ? (
             <View
-              className="mt-6 rounded-3xl bg-white p-6 shadow-sm overflow-hidden"
-              style={{ borderWidth: 1, borderColor: feelColor + '40' }}
+              className="mt-6 rounded-3xl bg-gray-900 p-6 border border-gray-800 overflow-hidden"
             >
               {/* Colored top banner */}
               <View
@@ -114,12 +113,12 @@ export default function HomeScreen() {
                 style={{ backgroundColor: feelColor }}
               />
 
-              <Text className="text-sm font-medium text-gray-500">Today's Feelsy Score</Text>
+              <Text className="text-sm font-medium text-gray-400">Today's Feelsy Score</Text>
 
               <View className="mt-4 items-center">
                 {/* Daily Check-In Complete badge */}
-                <View className="bg-green-100 px-3 py-1 rounded-full mb-3">
-                  <Text className="text-green-700 text-sm font-medium">Daily Check-In Complete ✓</Text>
+                <View className="bg-green-900/40 px-3 py-1 rounded-full mb-3 border border-green-800">
+                  <Text className="text-green-400 text-sm font-medium">Daily Check-In Complete</Text>
                 </View>
 
                 <View
@@ -131,29 +130,29 @@ export default function HomeScreen() {
                 <Text className="mt-4 text-5xl font-bold" style={{ color: feelColor }}>
                   {todayCheck.feel_score}
                 </Text>
-                <Text className="mt-1 text-lg font-medium text-gray-600">
+                <Text className="mt-1 text-lg font-medium text-gray-300">
                   {getFeelLabel(todayCheck.feel_score)}
                 </Text>
 
                 <View className="mt-4 flex-row gap-4">
                   <View className="items-center">
-                    <Text className="text-sm text-gray-500">Mood</Text>
-                    <Text className="text-lg font-semibold text-gray-900">{todayCheck.mood_score}</Text>
+                    <Text className="text-sm text-gray-400">Mood</Text>
+                    <Text className="text-lg font-semibold text-white">{todayCheck.mood_score}</Text>
                   </View>
-                  <View className="h-8 w-px bg-gray-200" />
+                  <View className="h-8 w-px bg-gray-700" />
                   <View className="items-center">
-                    <Text className="text-sm text-gray-500">Energy</Text>
-                    <Text className="text-lg font-semibold text-gray-900">{todayCheck.energy_score}</Text>
+                    <Text className="text-sm text-gray-400">Energy</Text>
+                    <Text className="text-lg font-semibold text-white">{todayCheck.energy_score}</Text>
                   </View>
                 </View>
 
                 {/* Streak info */}
                 <View className="mt-3 flex-row items-center">
-                  <Text className="text-sm text-gray-500">🔥 {stats?.current_streak || 0} day streak</Text>
+                  <Text className="text-sm text-gray-400">{stats?.current_streak || 0} day streak</Text>
                 </View>
 
                 {todayCheck.note && (
-                  <Text className="mt-4 text-center text-gray-600 italic">
+                  <Text className="mt-4 text-center text-gray-300 italic">
                     "{todayCheck.note}"
                   </Text>
                 )}
@@ -168,32 +167,32 @@ export default function HomeScreen() {
             </View>
           ) : (
             // Check-in Form
-            <View className="mt-6 rounded-3xl bg-white p-6 shadow-sm">
+            <View className="mt-6 rounded-3xl bg-gray-900 p-6 border border-gray-800">
               {!showCheckin ? (
                 <Pressable
                   onPress={() => { setShowCheckin(true); hapticSelection(); }}
                   className="items-center py-8"
                 >
                   <Text className="text-6xl">✨</Text>
-                  <Text className="mt-4 text-xl font-semibold text-gray-900">
+                  <Text className="mt-4 text-xl font-semibold text-white">
                     Log Today's Feels
                   </Text>
-                  <Text className="mt-2 text-gray-500">
+                  <Text className="mt-2 text-gray-400">
                     Tap to start your daily check-in
                   </Text>
                 </Pressable>
               ) : (
                 <View>
-                  <Text className="text-lg font-semibold text-gray-900 mb-4">Daily Check-In</Text>
+                  <Text className="text-lg font-semibold text-white mb-4">Daily Check-In</Text>
 
                   {/* Mood Score */}
                   <View className="mb-6">
-                    <Text className="text-sm font-medium text-gray-700 mb-2">
+                    <Text className="text-sm font-medium text-gray-300 mb-2">
                       Mood: {moodScore}
                     </Text>
                     <View className="flex-row items-center">
                       <Text className="text-xl mr-2">😔</Text>
-                      <View className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+                      <View className="flex-1 h-2 bg-gray-700 rounded-full overflow-hidden">
                         <View
                           className="h-full rounded-full"
                           style={{ width: `${moodScore}%`, backgroundColor: getColorForScore(moodScore) }}
@@ -217,12 +216,12 @@ export default function HomeScreen() {
 
                   {/* Energy Score */}
                   <View className="mb-6">
-                    <Text className="text-sm font-medium text-gray-700 mb-2">
+                    <Text className="text-sm font-medium text-gray-300 mb-2">
                       Energy: {energyScore}
                     </Text>
                     <View className="flex-row items-center">
                       <Text className="text-xl mr-2">😴</Text>
-                      <View className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+                      <View className="flex-1 h-2 bg-gray-700 rounded-full overflow-hidden">
                         <View
                           className="h-full rounded-full"
                           style={{ width: `${energyScore}%`, backgroundColor: getColorForScore(energyScore) }}
@@ -246,7 +245,7 @@ export default function HomeScreen() {
 
                   {/* Emoji Selector */}
                   <View className="mb-6">
-                    <Text className="text-sm font-medium text-gray-700 mb-2">How do you feel?</Text>
+                    <Text className="text-sm font-medium text-gray-300 mb-2">How do you feel?</Text>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                       <View className="flex-row gap-2">
                         {MOOD_EMOJIS.map((emoji) => (
@@ -254,7 +253,7 @@ export default function HomeScreen() {
                             key={emoji}
                             onPress={() => { setSelectedEmoji(emoji); hapticSelection(); }}
                             className={`w-12 h-12 items-center justify-center rounded-full ${
-                              selectedEmoji === emoji ? 'bg-primary-100' : 'bg-gray-100'
+                              selectedEmoji === emoji ? 'bg-rose-900/40' : 'bg-gray-800'
                             }`}
                           >
                             <Text className="text-2xl">{emoji}</Text>
@@ -266,12 +265,13 @@ export default function HomeScreen() {
 
                   {/* Note */}
                   <View className="mb-6">
-                    <Text className="text-sm font-medium text-gray-700 mb-2">Add a note (optional)</Text>
+                    <Text className="text-sm font-medium text-gray-300 mb-2">Add a note (optional)</Text>
                     <TextInput
                       value={note}
                       onChangeText={setNote}
                       placeholder="What's on your mind?"
-                      className="bg-gray-100 rounded-xl px-4 py-3 text-base"
+                      placeholderTextColor="#6b7280"
+                      className="bg-gray-800 rounded-xl px-4 py-3 text-base text-white"
                       multiline
                       numberOfLines={2}
                     />
@@ -279,7 +279,7 @@ export default function HomeScreen() {
 
                   {/* Preview Score */}
                   <View className="items-center mb-6 p-4 rounded-2xl" style={{ backgroundColor: feelColor + '15' }}>
-                    <Text className="text-sm text-gray-600">Your Feelsy Score</Text>
+                    <Text className="text-sm text-gray-300">Your Feelsy Score</Text>
                     <Text className="text-4xl font-bold" style={{ color: feelColor }}>{feelScore}</Text>
                     <Text className="text-lg" style={{ color: feelColor }}>{getFeelLabel(feelScore)}</Text>
                   </View>
@@ -298,32 +298,32 @@ export default function HomeScreen() {
           {/* Stats Cards */}
           {stats && (
             <View className="mt-6 flex-row gap-3">
-              <View className="flex-1 rounded-2xl bg-white p-4 shadow-sm">
+              <View className="flex-1 rounded-2xl bg-gray-900 p-4 border border-gray-800">
                 <Text className="text-3xl">🔥</Text>
-                <Text className="mt-2 text-2xl font-bold text-gray-900">{stats.current_streak}</Text>
-                <Text className="text-sm text-gray-500">Day Streak</Text>
+                <Text className="mt-2 text-2xl font-bold text-white">{stats.current_streak}</Text>
+                <Text className="text-sm text-gray-400">Day Streak</Text>
               </View>
-              <View className="flex-1 rounded-2xl bg-white p-4 shadow-sm">
+              <View className="flex-1 rounded-2xl bg-gray-900 p-4 border border-gray-800">
                 <Text className="text-3xl">📊</Text>
-                <Text className="mt-2 text-2xl font-bold text-gray-900">{stats.total_check_ins}</Text>
-                <Text className="text-sm text-gray-500">Check-ins</Text>
+                <Text className="mt-2 text-2xl font-bold text-white">{stats.total_check_ins}</Text>
+                <Text className="text-sm text-gray-400">Check-ins</Text>
               </View>
-              <View className="flex-1 rounded-2xl bg-white p-4 shadow-sm">
+              <View className="flex-1 rounded-2xl bg-gray-900 p-4 border border-gray-800">
                 <Text className="text-3xl">✨</Text>
-                <Text className="mt-2 text-2xl font-bold text-gray-900">{Math.round(stats.average_score)}</Text>
-                <Text className="text-sm text-gray-500">Avg Score</Text>
+                <Text className="mt-2 text-2xl font-bold text-white">{Math.round(stats.average_score)}</Text>
+                <Text className="text-sm text-gray-400">Avg Score</Text>
               </View>
             </View>
           )}
 
           {/* Badges */}
           {stats && stats.unlocked_badges.length > 0 && (
-            <View className="mt-6 rounded-2xl bg-white p-4 shadow-sm">
-              <Text className="text-lg font-semibold text-gray-900 mb-3">Your Badges</Text>
+            <View className="mt-6 rounded-2xl bg-gray-900 p-4 border border-gray-800">
+              <Text className="text-lg font-semibold text-white mb-3">Your Badges</Text>
               <View className="flex-row flex-wrap gap-2">
                 {stats.unlocked_badges.map((badge) => (
-                  <View key={badge} className="bg-primary-50 px-3 py-1 rounded-full">
-                    <Text className="text-primary-700">{badge}</Text>
+                  <View key={badge} className="bg-rose-900/30 px-3 py-1 rounded-full border border-rose-800">
+                    <Text className="text-rose-300">{badge}</Text>
                   </View>
                 ))}
               </View>

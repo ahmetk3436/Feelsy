@@ -61,9 +61,9 @@ export default function InsightsScreen() {
 
   if (isLoading) {
     return (
-      <SafeAreaView className="flex-1 bg-gray-50">
+      <SafeAreaView className="flex-1 bg-gray-950">
         <View className="flex-1 items-center justify-center">
-          <ActivityIndicator size="large" color="#8b5cf6" />
+          <ActivityIndicator size="large" color="#f43f5e" />
         </View>
       </SafeAreaView>
     );
@@ -71,21 +71,21 @@ export default function InsightsScreen() {
 
   if (!insights) {
     return (
-      <SafeAreaView className="flex-1 bg-gray-50">
+      <SafeAreaView className="flex-1 bg-gray-950">
         <ScrollView
           className="flex-1"
           contentContainerStyle={{ paddingBottom: 100 }}
           refreshControl={
-            <RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} tintColor="#8b5cf6" />
+            <RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} tintColor="#f43f5e" />
           }
         >
           <View className="px-6 pt-8">
-            <Text className="text-3xl font-bold text-gray-900">Insights</Text>
-            <Text className="mt-1 text-base text-gray-500">Your weekly mood trends</Text>
+            <Text className="text-3xl font-bold text-white">Insights</Text>
+            <Text className="mt-1 text-base text-gray-400">Your weekly mood trends</Text>
             <View className="mt-12 items-center">
               <Text className="text-6xl">📊</Text>
-              <Text className="mt-4 text-xl font-semibold text-gray-900">No insights yet</Text>
-              <Text className="mt-2 text-center text-gray-500">
+              <Text className="mt-4 text-xl font-semibold text-white">No insights yet</Text>
+              <Text className="mt-2 text-center text-gray-400">
                 Start logging your daily feels to unlock weekly mood insights and trends.
               </Text>
             </View>
@@ -108,28 +108,28 @@ export default function InsightsScreen() {
   const checkinPercent = Math.min(100, Math.round((current.total_checkins / 7) * 100));
 
   return (
-    <SafeAreaView className="flex-1 bg-gray-50">
+    <SafeAreaView className="flex-1 bg-gray-950">
       <ScrollView
         className="flex-1"
         contentContainerStyle={{ paddingBottom: 100 }}
         refreshControl={
-          <RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} tintColor="#8b5cf6" />
+          <RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} tintColor="#f43f5e" />
         }
       >
         <View className="px-6 pt-8">
           {/* Header */}
-          <Text className="text-3xl font-bold text-gray-900">Insights</Text>
-          <Text className="mt-1 text-base text-gray-500">Your weekly mood trends</Text>
+          <Text className="text-3xl font-bold text-white">Insights</Text>
+          <Text className="mt-1 text-base text-gray-400">Your weekly mood trends</Text>
 
           {/* Personalized Message Card */}
           <View
-            className="mt-6 rounded-3xl p-6 shadow-sm"
+            className="mt-6 rounded-3xl p-6 border border-gray-800"
             style={{ backgroundColor: getColorForScore(current.average_feel) + '15' }}
           >
             <View className="flex-row items-center">
               <Text className="text-5xl">{current.dominant_emoji || '✨'}</Text>
               <View className="ml-4 flex-1">
-                <Text className="text-lg font-medium text-gray-800">
+                <Text className="text-lg font-medium text-gray-200">
                   {insights.message}
                 </Text>
                 <View className="mt-2 flex-row items-center">
@@ -145,46 +145,46 @@ export default function InsightsScreen() {
           </View>
 
           {/* This Week Stats */}
-          <Text className="mt-6 text-lg font-semibold text-gray-900">This Week</Text>
+          <Text className="mt-6 text-lg font-semibold text-white">This Week</Text>
           <View className="mt-3 flex-row gap-3">
-            <View className="flex-1 rounded-2xl bg-white p-4 shadow-sm items-center">
-              <Text className="text-sm text-gray-500">Mood</Text>
+            <View className="flex-1 rounded-2xl bg-gray-900 p-4 border border-gray-800 items-center">
+              <Text className="text-sm text-gray-400">Mood</Text>
               <Text
                 className="mt-1 text-2xl font-bold"
                 style={{ color: getColorForScore(current.average_mood) }}
               >
                 {current.average_mood.toFixed(0)}
               </Text>
-              <Text className="text-xs text-gray-400">{getFeelLabel(current.average_mood)}</Text>
+              <Text className="text-xs text-gray-500">{getFeelLabel(current.average_mood)}</Text>
             </View>
-            <View className="flex-1 rounded-2xl bg-white p-4 shadow-sm items-center">
-              <Text className="text-sm text-gray-500">Energy</Text>
+            <View className="flex-1 rounded-2xl bg-gray-900 p-4 border border-gray-800 items-center">
+              <Text className="text-sm text-gray-400">Energy</Text>
               <Text
                 className="mt-1 text-2xl font-bold"
                 style={{ color: getColorForScore(current.average_energy) }}
               >
                 {current.average_energy.toFixed(0)}
               </Text>
-              <Text className="text-xs text-gray-400">{getFeelLabel(current.average_energy)}</Text>
+              <Text className="text-xs text-gray-500">{getFeelLabel(current.average_energy)}</Text>
             </View>
-            <View className="flex-1 rounded-2xl bg-white p-4 shadow-sm items-center">
-              <Text className="text-sm text-gray-500">Feel</Text>
+            <View className="flex-1 rounded-2xl bg-gray-900 p-4 border border-gray-800 items-center">
+              <Text className="text-sm text-gray-400">Feel</Text>
               <Text
                 className="mt-1 text-2xl font-bold"
                 style={{ color: getColorForScore(current.average_feel) }}
               >
                 {current.average_feel.toFixed(0)}
               </Text>
-              <Text className="text-xs text-gray-400">{getFeelLabel(current.average_feel)}</Text>
+              <Text className="text-xs text-gray-500">{getFeelLabel(current.average_feel)}</Text>
             </View>
           </View>
 
           {/* Comparison Section */}
-          <Text className="mt-6 text-lg font-semibold text-gray-900">vs Last Week</Text>
+          <Text className="mt-6 text-lg font-semibold text-white">vs Last Week</Text>
           <View className="mt-3 flex-row gap-3">
-            <View className="flex-1 rounded-2xl bg-white p-4 shadow-sm items-center">
-              <Text className="text-sm text-gray-500">Mood</Text>
-              <Text className="mt-1 text-lg text-gray-700">{previous.average_mood.toFixed(0)}</Text>
+            <View className="flex-1 rounded-2xl bg-gray-900 p-4 border border-gray-800 items-center">
+              <Text className="text-sm text-gray-400">Mood</Text>
+              <Text className="mt-1 text-lg text-gray-300">{previous.average_mood.toFixed(0)}</Text>
               <Text
                 className="text-xs font-semibold"
                 style={{ color: moodDiff >= 0 ? '#22c55e' : '#ef4444' }}
@@ -192,9 +192,9 @@ export default function InsightsScreen() {
                 {moodDiff >= 0 ? '+' : ''}{moodDiff}
               </Text>
             </View>
-            <View className="flex-1 rounded-2xl bg-white p-4 shadow-sm items-center">
-              <Text className="text-sm text-gray-500">Energy</Text>
-              <Text className="mt-1 text-lg text-gray-700">{previous.average_energy.toFixed(0)}</Text>
+            <View className="flex-1 rounded-2xl bg-gray-900 p-4 border border-gray-800 items-center">
+              <Text className="text-sm text-gray-400">Energy</Text>
+              <Text className="mt-1 text-lg text-gray-300">{previous.average_energy.toFixed(0)}</Text>
               <Text
                 className="text-xs font-semibold"
                 style={{ color: energyDiff >= 0 ? '#22c55e' : '#ef4444' }}
@@ -202,9 +202,9 @@ export default function InsightsScreen() {
                 {energyDiff >= 0 ? '+' : ''}{energyDiff}
               </Text>
             </View>
-            <View className="flex-1 rounded-2xl bg-white p-4 shadow-sm items-center">
-              <Text className="text-sm text-gray-500">Feel</Text>
-              <Text className="mt-1 text-lg text-gray-700">{previous.average_feel.toFixed(0)}</Text>
+            <View className="flex-1 rounded-2xl bg-gray-900 p-4 border border-gray-800 items-center">
+              <Text className="text-sm text-gray-400">Feel</Text>
+              <Text className="mt-1 text-lg text-gray-300">{previous.average_feel.toFixed(0)}</Text>
               <Text
                 className="text-xs font-semibold"
                 style={{ color: feelDiff >= 0 ? '#22c55e' : '#ef4444' }}
@@ -217,42 +217,42 @@ export default function InsightsScreen() {
           {/* Best / Worst Day */}
           <View className="mt-6 flex-row gap-3">
             <View
-              className="flex-1 rounded-2xl p-4 shadow-sm"
+              className="flex-1 rounded-2xl p-4 border border-gray-800"
               style={{ backgroundColor: '#22c55e15' }}
             >
               <Text className="text-3xl">🌟</Text>
-              <Text className="mt-2 text-sm font-semibold text-gray-900">Best Day</Text>
-              <Text className="mt-1 text-sm text-gray-600">
+              <Text className="mt-2 text-sm font-semibold text-white">Best Day</Text>
+              <Text className="mt-1 text-sm text-gray-300">
                 {formatDay(current.best_day)}
               </Text>
             </View>
             <View
-              className="flex-1 rounded-2xl p-4 shadow-sm"
+              className="flex-1 rounded-2xl p-4 border border-gray-800"
               style={{ backgroundColor: '#f9731615' }}
             >
               <Text className="text-3xl">💪</Text>
-              <Text className="mt-2 text-sm font-semibold text-gray-900">Tough Day</Text>
-              <Text className="mt-1 text-sm text-gray-600">
+              <Text className="mt-2 text-sm font-semibold text-white">Tough Day</Text>
+              <Text className="mt-1 text-sm text-gray-300">
                 {formatDay(current.worst_day)}
               </Text>
-              <Text className="mt-1 text-xs text-gray-400">You got through it!</Text>
+              <Text className="mt-1 text-xs text-gray-500">You got through it!</Text>
             </View>
           </View>
 
           {/* Check-in Progress */}
-          <View className="mt-6 rounded-2xl bg-white p-4 shadow-sm">
+          <View className="mt-6 rounded-2xl bg-gray-900 p-4 border border-gray-800">
             <View className="flex-row items-center justify-between">
-              <Text className="text-sm font-semibold text-gray-900">Check-in Progress</Text>
-              <Text className="text-sm text-gray-500">
+              <Text className="text-sm font-semibold text-white">Check-in Progress</Text>
+              <Text className="text-sm text-gray-400">
                 {current.total_checkins} of 7 days tracked
               </Text>
             </View>
-            <View className="mt-3 h-2 rounded-full bg-gray-200">
+            <View className="mt-3 h-2 rounded-full bg-gray-700">
               <View
                 className="h-2 rounded-full"
                 style={{
                   width: `${checkinPercent}%`,
-                  backgroundColor: '#8b5cf6',
+                  backgroundColor: '#f43f5e',
                 }}
               />
             </View>

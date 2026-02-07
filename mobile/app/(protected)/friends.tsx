@@ -141,7 +141,7 @@ export default function FriendsScreen() {
       <Pressable
         onPress={() => openVibeModal(item)}
         onLongPress={() => removeFriend(item)}
-        className="mx-4 mb-3 rounded-2xl bg-white p-4 shadow-sm active:opacity-70"
+        className="mx-4 mb-3 rounded-2xl bg-gray-900 p-4 border border-gray-800 active:opacity-70"
       >
         <View className="flex-row items-center justify-between">
           <View className="flex-row items-center">
@@ -152,8 +152,8 @@ export default function FriendsScreen() {
               <Text className="text-xl">{item.mood_emoji || '😊'}</Text>
             </View>
             <View className="ml-3">
-              <Text className="text-lg font-semibold text-gray-900">{item.name}</Text>
-              <Text className="text-sm text-gray-500">Tap to send vibes</Text>
+              <Text className="text-lg font-semibold text-white">{item.name}</Text>
+              <Text className="text-sm text-gray-400">Tap to send vibes</Text>
             </View>
           </View>
           <View className="items-center">
@@ -165,17 +165,17 @@ export default function FriendsScreen() {
   };
 
   const renderVibe = ({ item }: { item: GoodVibe }) => (
-    <View className="mx-4 mb-3 rounded-2xl bg-gradient-to-r from-purple-50 to-pink-50 bg-white p-4 shadow-sm">
+    <View className="mx-4 mb-3 rounded-2xl bg-gray-900 p-4 border border-gray-800">
       <View className="flex-row items-center">
-        <Text className="text-3xl mr-3">{VIBE_EMOJIS[item.vibe_type as VibeType] || '💜'}</Text>
+        <Text className="text-3xl mr-3">{VIBE_EMOJIS[item.vibe_type as VibeType] || '💗'}</Text>
         <View className="flex-1">
-          <Text className="text-base font-medium text-gray-900">
+          <Text className="text-base font-medium text-white">
             {item.sender_name || 'A friend'} sent you good vibes!
           </Text>
           {item.message && (
-            <Text className="text-sm text-gray-600 mt-1">"{item.message}"</Text>
+            <Text className="text-sm text-gray-300 mt-1">"{item.message}"</Text>
           )}
-          <Text className="text-xs text-gray-400 mt-1">
+          <Text className="text-xs text-gray-500 mt-1">
             {new Date(item.created_at).toLocaleDateString()}
           </Text>
         </View>
@@ -184,24 +184,24 @@ export default function FriendsScreen() {
   );
 
   const renderRequest = ({ item }: { item: FriendRequest }) => (
-    <View className="mx-4 mb-3 rounded-2xl bg-white p-4 shadow-sm">
+    <View className="mx-4 mb-3 rounded-2xl bg-gray-900 p-4 border border-gray-800">
       <View className="flex-row items-center justify-between">
         <View className="flex-1 mr-3">
-          <Text className="text-base font-medium text-gray-900">{item.friend_email}</Text>
-          <Text className="text-xs text-gray-400 mt-1">
+          <Text className="text-base font-medium text-white">{item.friend_email}</Text>
+          <Text className="text-xs text-gray-500 mt-1">
             {new Date(item.created_at).toLocaleDateString()}
           </Text>
         </View>
         <View className="flex-row">
           <Pressable
             onPress={() => declineRequest(item.id)}
-            className="rounded-lg bg-gray-200 px-4 py-2 mr-2"
+            className="rounded-lg bg-gray-700 px-4 py-2 mr-2"
           >
-            <Text className="text-sm font-medium text-gray-700">Decline</Text>
+            <Text className="text-sm font-medium text-gray-300">Decline</Text>
           </Pressable>
           <Pressable
             onPress={() => acceptRequest(item.id)}
-            className="rounded-lg bg-green-500 px-4 py-2"
+            className="rounded-lg bg-green-600 px-4 py-2"
           >
             <Text className="text-sm font-medium text-white">Accept</Text>
           </Pressable>
@@ -212,19 +212,19 @@ export default function FriendsScreen() {
 
   if (isLoading) {
     return (
-      <SafeAreaView className="flex-1 bg-gray-50">
+      <SafeAreaView className="flex-1 bg-gray-950">
         <View className="flex-1 items-center justify-center">
-          <ActivityIndicator size="large" color="#8b5cf6" />
+          <ActivityIndicator size="large" color="#f43f5e" />
         </View>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-gray-50">
+    <SafeAreaView className="flex-1 bg-gray-950">
       <View className="px-6 pt-8 pb-4">
-        <Text className="text-3xl font-bold text-gray-900">Friends</Text>
-        <Text className="mt-1 text-base text-gray-500">
+        <Text className="text-3xl font-bold text-white">Friends</Text>
+        <Text className="mt-1 text-base text-gray-400">
           Share good vibes with your circle
         </Text>
       </View>
@@ -234,7 +234,7 @@ export default function FriendsScreen() {
         renderItem={renderVibe}
         keyExtractor={(item) => item.id}
         refreshControl={
-          <RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} />
+          <RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} tintColor="#f43f5e" />
         }
         ListHeaderComponent={
           <>
@@ -245,11 +245,11 @@ export default function FriendsScreen() {
                   value={friendEmail}
                   onChangeText={setFriendEmail}
                   placeholder="Friend's email address"
-                  placeholderTextColor="#9ca3af"
+                  placeholderTextColor="#6b7280"
                   keyboardType="email-address"
                   autoCapitalize="none"
                   autoCorrect={false}
-                  className="flex-1 rounded-xl bg-gray-100 px-4 py-3 text-base mr-3"
+                  className="flex-1 rounded-xl bg-gray-800 px-4 py-3 text-base text-white mr-3 border border-gray-700"
                 />
                 <Button
                   title="Add Friend"
@@ -265,9 +265,9 @@ export default function FriendsScreen() {
             {requests.length > 0 && (
               <View className="mb-4">
                 <View className="flex-row items-center px-6 mb-3">
-                  <Text className="text-lg font-semibold text-gray-900">Friend Requests</Text>
-                  <View className="ml-2 rounded-full bg-primary-100 px-2 py-0.5">
-                    <Text className="text-xs font-semibold text-primary-700">{requests.length}</Text>
+                  <Text className="text-lg font-semibold text-white">Friend Requests</Text>
+                  <View className="ml-2 rounded-full bg-rose-900/40 px-2 py-0.5 border border-rose-800">
+                    <Text className="text-xs font-semibold text-rose-400">{requests.length}</Text>
                   </View>
                 </View>
                 <FlatList
@@ -282,7 +282,7 @@ export default function FriendsScreen() {
             {/* Friends List Section */}
             {friends.length > 0 && (
               <View className="mb-4">
-                <Text className="px-6 text-lg font-semibold text-gray-900 mb-3">Today's Feels</Text>
+                <Text className="px-6 text-lg font-semibold text-white mb-3">Today's Feels</Text>
                 <FlatList
                   data={friends}
                   renderItem={renderFriend}
@@ -296,42 +296,42 @@ export default function FriendsScreen() {
             {friends.length === 0 && requests.length === 0 && (
               <View className="items-center justify-center py-10">
                 <Text className="text-5xl mb-3">👋</Text>
-                <Text className="text-lg font-medium text-gray-500">No friends yet</Text>
-                <Text className="text-sm text-gray-400 mt-1">Add friends by email to share vibes!</Text>
+                <Text className="text-lg font-medium text-gray-400">No friends yet</Text>
+                <Text className="text-sm text-gray-500 mt-1">Add friends by email to share vibes!</Text>
               </View>
             )}
 
             {/* Vibes Section Header */}
             {vibes.length > 0 && (
-              <Text className="px-6 text-lg font-semibold text-gray-900 mb-3">Received Vibes</Text>
+              <Text className="px-6 text-lg font-semibold text-white mb-3">Received Vibes</Text>
             )}
           </>
         }
         ListEmptyComponent={
           friends.length > 0 || requests.length > 0 ? (
             <View className="items-center justify-center py-10">
-              <Text className="text-5xl mb-3">💜</Text>
-              <Text className="text-gray-500">No vibes yet</Text>
-              <Text className="text-sm text-gray-400">Send some to friends!</Text>
+              <Text className="text-5xl mb-3">💗</Text>
+              <Text className="text-gray-400">No vibes yet</Text>
+              <Text className="text-sm text-gray-500">Send some to friends!</Text>
             </View>
           ) : null
         }
         contentContainerStyle={{ paddingBottom: 100 }}
       />
 
-      {/* Send Vibe Modal — UNCHANGED */}
+      {/* Send Vibe Modal */}
       <Modal
         visible={showVibeModal}
         animationType="slide"
         presentationStyle="pageSheet"
         onRequestClose={() => setShowVibeModal(false)}
       >
-        <SafeAreaView className="flex-1 bg-white">
+        <SafeAreaView className="flex-1 bg-gray-950">
           <View className="px-6 pt-6">
             <View className="flex-row items-center justify-between mb-6">
-              <Text className="text-2xl font-bold text-gray-900">Send Good Vibes</Text>
+              <Text className="text-2xl font-bold text-white">Send Good Vibes</Text>
               <Pressable onPress={() => setShowVibeModal(false)}>
-                <Text className="text-primary-600 text-lg">Cancel</Text>
+                <Text className="text-rose-500 text-lg">Cancel</Text>
               </Pressable>
             </View>
 
@@ -343,19 +343,19 @@ export default function FriendsScreen() {
                 >
                   <Text className="text-4xl">{selectedFriend.mood_emoji || '😊'}</Text>
                 </View>
-                <Text className="text-xl font-semibold text-gray-900">{selectedFriend.name}</Text>
+                <Text className="text-xl font-semibold text-white">{selectedFriend.name}</Text>
               </View>
             )}
 
             {/* Vibe Type Selector */}
-            <Text className="text-base font-medium text-gray-700 mb-3">Choose a vibe</Text>
+            <Text className="text-base font-medium text-gray-300 mb-3">Choose a vibe</Text>
             <View className="flex-row justify-around mb-6">
               {(Object.keys(VIBE_EMOJIS) as VibeType[]).map((type) => (
                 <Pressable
                   key={type}
                   onPress={() => { setSelectedVibe(type); hapticSelection(); }}
                   className={`w-16 h-16 items-center justify-center rounded-2xl ${
-                    selectedVibe === type ? 'bg-primary-100 border-2 border-primary-500' : 'bg-gray-100'
+                    selectedVibe === type ? 'bg-rose-900/40 border-2 border-rose-500' : 'bg-gray-800'
                   }`}
                 >
                   <Text className="text-3xl">{VIBE_EMOJIS[type]}</Text>
@@ -364,12 +364,13 @@ export default function FriendsScreen() {
             </View>
 
             {/* Message Input */}
-            <Text className="text-base font-medium text-gray-700 mb-2">Add a message (optional)</Text>
+            <Text className="text-base font-medium text-gray-300 mb-2">Add a message (optional)</Text>
             <TextInput
               value={vibeMessage}
               onChangeText={setVibeMessage}
               placeholder="You got this!"
-              className="bg-gray-100 rounded-xl px-4 py-3 text-base mb-6"
+              placeholderTextColor="#6b7280"
+              className="bg-gray-800 rounded-xl px-4 py-3 text-base text-white mb-6 border border-gray-700"
               multiline
               numberOfLines={2}
             />

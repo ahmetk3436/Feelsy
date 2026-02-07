@@ -45,24 +45,24 @@ export default function RegisterScreen() {
 
   return (
     <KeyboardAvoidingView
-      className="flex-1 bg-white"
+      className="flex-1 bg-gray-950"
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <View className="flex-1 justify-center px-8">
         <View className="items-center mb-6">
-          <Text className="text-6xl">💜</Text>
-          <Text className="text-2xl font-bold text-primary-600">Feelsy</Text>
+          <Text className="text-6xl">💗</Text>
+          <Text className="text-2xl font-bold text-rose-500">Feelsy</Text>
         </View>
-        <Text className="mb-2 text-3xl font-bold text-gray-900">
+        <Text className="mb-2 text-3xl font-bold text-white">
           Join Feelsy
         </Text>
-        <Text className="mb-8 text-base text-gray-500">
+        <Text className="mb-8 text-base text-gray-400">
           Start tracking your daily moods and vibes
         </Text>
 
         {error ? (
-          <View className="mb-4 rounded-lg bg-red-50 p-3">
-            <Text className="text-sm text-red-600">{error}</Text>
+          <View className="mb-4 rounded-lg bg-red-900/40 p-3 border border-red-800">
+            <Text className="text-sm text-red-400">{error}</Text>
           </View>
         ) : null}
 
@@ -108,9 +108,9 @@ export default function RegisterScreen() {
         />
 
         <View className="mt-6 flex-row items-center justify-center">
-          <Text className="text-gray-500">Already have an account? </Text>
+          <Text className="text-gray-400">Already have an account? </Text>
           <Link href="/(auth)/login" asChild>
-            <Text className="font-semibold text-primary-600">Sign In</Text>
+            <Text className="font-semibold text-rose-500">Sign In</Text>
           </Link>
         </View>
       </View>
