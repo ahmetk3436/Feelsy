@@ -32,7 +32,7 @@ func (h *FeelHandler) CreateFeelCheck(c *fiber.Ctx) error {
 		})
 	}
 
-	check, err := h.service.CreateFeelCheck(userID, req.MoodScore, req.EnergyScore, req.MoodEmoji, req.Note)
+	check, err := h.service.CreateFeelCheck(userID, req.MoodScore, req.EnergyScore, req.MoodEmoji, req.Note, req.JournalEntry)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":   true,
@@ -347,4 +347,54 @@ func (h *FeelHandler) GetWeeklyInsights(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(insights)
+}
+
+// UpdateJournal handles PUT /api/feels/:id/journal
+func (h *FeelHandler) UpdateJournal(c *fiber.Ctx) error {
+	userToken := c.Locals("user").(*jwt.Token)
+	claims := userToken.Claims.(jwt.MapClaims)
+	userID, _ := uuid.Parse(claims["sub"].(string))
+
+	checkID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":   true,
+			"message": "Invalid check-in ID",
+		})
+	}
+
+	var req dto.UpdateJournalRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":   true,
+			"message": "Invalid request body",
+		})
+	}
+
+	check, err := h.service.UpdateJournalEntry(userID, checkID, req.JournalEntry)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":   true,
+			"message": err.Error(),
+		})
+	}
+
+	return c.JSON(check)
+}
+
+// GetWeeklyRecap handles GET /api/feels/recap
+func (h *FeelHandler) GetWeeklyRecap(c *fiber.Ctx) error {
+	userToken := c.Locals("user").(*jwt.Token)
+	claims := userToken.Claims.(jwt.MapClaims)
+	userID, _ := uuid.Parse(claims["sub"].(string))
+
+	recap, err := h.service.GetWeeklyRecap(userID)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error":   true,
+			"message": "No data for recap",
+		})
+	}
+
+	return c.JSON(recap)
 }

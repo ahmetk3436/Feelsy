@@ -45,6 +45,8 @@ func Setup(
 	feels.Get("/history", feelHandler.GetFeelHistory)   // Get check-in history
 	feels.Get("/stats", feelHandler.GetFeelStats)       // Get stats & streaks
 	feels.Get("/insights", feelHandler.GetWeeklyInsights) // Get weekly mood insights
+	feels.Get("/recap", feelHandler.GetWeeklyRecap)      // Get weekly recap summary
+	feels.Put("/:id/journal", feelHandler.UpdateJournal) // Update journal entry
 	feels.Post("/vibe", feelHandler.SendGoodVibe)       // Send good vibes to friend
 	feels.Get("/vibes", feelHandler.GetReceivedVibes)   // Get received vibes
 	feels.Get("/friends", feelHandler.GetFriendFeels)   // Get friend feels today
@@ -57,9 +59,8 @@ func Setup(
 	feels.Delete("/friends/:id/reject", feelHandler.RejectFriendRequest)   // Reject friend request
 	feels.Delete("/friends/:id", feelHandler.RemoveFriend)                 // Remove friend
 
-	// Admin moderation panel (protected + admin check)
-	// In production, add an admin role middleware here
-	admin := api.Group("/admin", middleware.JWTProtected(cfg))
+	// Admin moderation panel (protected + admin role required)
+	admin := api.Group("/admin", middleware.JWTProtected(cfg), middleware.AdminOnly(cfg))
 	admin.Get("/moderation/reports", moderationHandler.ListReports)
 	admin.Put("/moderation/reports/:id", moderationHandler.ActionReport)
 

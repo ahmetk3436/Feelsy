@@ -59,6 +59,9 @@ export default function Button({
         isDisabled && 'opacity-50'
       )}
       disabled={isDisabled}
+      accessibilityRole="button"
+      accessibilityLabel={title}
+      accessibilityState={{ disabled: isLoading }}
       {...props}
     >
       {isLoading ? (

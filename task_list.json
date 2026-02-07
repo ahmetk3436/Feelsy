@@ -4,25 +4,26 @@
       "id": "enhance_015",
       "title": "Fix friend request API endpoint mismatch and add friends list call",
       "description": "CRITICAL BUG: The mobile app sends friend requests to POST /feels/friends but the backend route is POST /feels/friends/add. This causes all friend requests to fail silently.\n\nFile: mobile/app/(protected)/friends.tsx\n\nFix 1 — Line 54: Change `api.post('/feels/friends', { friend_email: friendEmail.trim() })` to `api.post('/feels/friends/add', { friend_email: friendEmail.trim() })`.\n\nFix 2 — The friends list only fetches today's friend feels via GET /feels/friends (GetFriendFeels handler). This means friends who haven't checked in today are invisible. The app should ALSO call GET /feels/friends/list to get the complete accepted friends list, then merge with today's feels data.\n\nIn loadData(), add a fourth API call: `api.get('/feels/friends/list')`. Create a new state variable `allFriends` for the full list. In the friends list section, display allFriends instead of just friends (today's feels). For each friend in allFriends, check if they exist in the friends array (today's feels) to show their current score, otherwise show a gray 'No check-in today' state.\n\nFix 3 — Guest mode counter: In mobile/contexts/AuthContext.tsx, the guest_uses counter is never incremented when a guest performs a check-in. In mobile/app/(protected)/home.tsx handleCheckIn function, after successful check-in, add guest usage tracking: if isGuest, read guest_uses from SecureStore, increment by 1, save back. If guest_uses \u003e= 3, show an Alert prompting to sign up and redirect to login.\n\nTest command verifies TypeScript compilation after all fixes.",
-      "status": "in_progress",
+      "status": "completed",
       "priority": 10,
       "depends_on": [],
       "test_command": "cd mobile \u0026\u0026 npx tsc --noEmit",
       "auto_commit": true,
       "created_at": "",
-      "updated_at": "2026-02-07T14:34:21Z"
+      "updated_at": "2026-02-07T14:42:52Z"
     },
     {
       "id": "enhance_016",
       "title": "Add admin role middleware to protect admin moderation endpoints",
       "description": "SECURITY BUG: The admin moderation endpoints at /api/admin/moderation/reports (GET and PUT) are only protected by JWT — any authenticated user can access admin functions. This must be fixed before production.\n\nFile: backend/internal/middleware/auth.go — Add a new AdminOnly middleware function:\n```go\nfunc AdminOnly(cfg *config.Config) fiber.Handler {\n    return func(c *fiber.Ctx) error {\n        token := c.Locals(\"user\").(*jwt.Token)\n        claims := token.Claims.(jwt.MapClaims)\n        role, ok := claims[\"role\"].(string)\n        if !ok || role != \"admin\" {\n            return c.Status(fiber.StatusForbidden).JSON(fiber.Map{\n                \"error\": true,\n                \"message\": \"Forbidden: admin access required\",\n            })\n        }\n        return c.Next()\n    }\n}\n```\n\nFile: backend/internal/models/user.go — Add Role field to User model: `Role string \\`gorm:\"default:user\"\\`` with possible values 'user' and 'admin'.\n\nFile: backend/internal/services/auth_service.go — In generateAccessToken, add the user's Role to JWT claims: `claims[\"role\"] = user.Role`.\n\nFile: backend/internal/routes/routes.go — Line 62: Add AdminOnly middleware after JWTProtected: `admin := api.Group(\"/admin\", middleware.JWTProtected(cfg), middleware.AdminOnly(cfg))`.\n\nFile: backend/internal/database/database.go — The User model is already in AutoMigrate, so the new Role column will be added automatically.\n\nThis ensures only users with role='admin' in the database can access moderation endpoints.",
-      "status": "pending",
+      "status": "failed",
       "priority": 10,
       "depends_on": [],
       "test_command": "cd backend \u0026\u0026 go build ./...",
       "auto_commit": true,
       "created_at": "",
-      "updated_at": ""
+      "updated_at": "2026-02-07T14:43:01Z",
+      "error": "planning failed: engine: all 1 providers failed:\n  provider GLM-Planner (glm-4.7): context canceled"
     },
     {
       "id": "enhance_017",

@@ -2,10 +2,11 @@ package dto
 
 // CreateFeelCheckRequest represents a request to create a feel check-in
 type CreateFeelCheckRequest struct {
-	MoodScore   int    `json:"mood_score" validate:"required,min=1,max=100"`
-	EnergyScore int    `json:"energy_score" validate:"required,min=1,max=100"`
-	MoodEmoji   string `json:"mood_emoji"`
-	Note        string `json:"note"`
+	MoodScore    int    `json:"mood_score" validate:"required,min=1,max=100"`
+	EnergyScore  int    `json:"energy_score" validate:"required,min=1,max=100"`
+	MoodEmoji    string `json:"mood_emoji"`
+	Note         string `json:"note"`
+	JournalEntry string `json:"journal_entry"`
 }
 
 // SendGoodVibeRequest represents a request to send good vibes
@@ -17,14 +18,33 @@ type SendGoodVibeRequest struct {
 
 // FeelCheckResponse represents a feel check response
 type FeelCheckResponse struct {
-	ID          string `json:"id"`
-	MoodScore   int    `json:"mood_score"`
-	EnergyScore int    `json:"energy_score"`
-	FeelScore   int    `json:"feel_score"`
-	MoodEmoji   string `json:"mood_emoji"`
-	Note        string `json:"note"`
-	ColorHex    string `json:"color_hex"`
-	CheckDate   string `json:"check_date"`
+	ID           string `json:"id"`
+	MoodScore    int    `json:"mood_score"`
+	EnergyScore  int    `json:"energy_score"`
+	FeelScore    int    `json:"feel_score"`
+	MoodEmoji    string `json:"mood_emoji"`
+	Note         string `json:"note"`
+	JournalEntry string `json:"journal_entry"`
+	ColorHex     string `json:"color_hex"`
+	CheckDate    string `json:"check_date"`
+}
+
+// UpdateJournalRequest represents a request to update a journal entry
+type UpdateJournalRequest struct {
+	JournalEntry string `json:"journal_entry"`
+}
+
+// WeeklyRecapResponse represents the weekly recap data
+type WeeklyRecapResponse struct {
+	TotalCheckins int     `json:"total_checkins"`
+	AverageScore  float64 `json:"average_score"`
+	BestScore     int     `json:"best_score"`
+	BestDay       string  `json:"best_day"`
+	TopEmoji      string  `json:"top_emoji"`
+	DailyScores   []int   `json:"daily_scores"`
+	CurrentStreak int     `json:"current_streak"`
+	WeekStart     string  `json:"week_start"`
+	WeekEnd       string  `json:"week_end"`
 }
 
 // FeelStatsResponse represents feel statistics

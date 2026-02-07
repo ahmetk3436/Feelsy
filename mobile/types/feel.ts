@@ -5,9 +5,22 @@ export interface FeelCheck {
   feel_score: number;
   mood_emoji: string;
   note: string;
+  journal_entry?: string;
   color_hex: string;
   check_date: string;
   created_at?: string;
+}
+
+export interface WeeklyRecap {
+  total_checkins: number;
+  average_score: number;
+  best_score: number;
+  best_day: string;
+  top_emoji: string;
+  daily_scores: number[];
+  current_streak: number;
+  week_start: string;
+  week_end: string;
 }
 
 export interface FeelStats {

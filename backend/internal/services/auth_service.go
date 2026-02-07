@@ -222,9 +222,14 @@ func (s *AuthService) generateTokenPair(user *models.User) (*dto.AuthResponse, e
 }
 
 func (s *AuthService) generateAccessToken(user *models.User) (string, error) {
+	role := user.Role
+	if role == "" {
+		role = "user"
+	}
 	claims := jwt.MapClaims{
 		"sub":   user.ID.String(),
 		"email": user.Email,
+		"role":  role,
 		"iat":   time.Now().Unix(),
 		"exp":   time.Now().Add(s.cfg.JWTAccessExpiry).Unix(),
 	}

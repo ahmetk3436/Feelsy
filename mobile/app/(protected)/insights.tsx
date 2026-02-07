@@ -3,6 +3,7 @@ import { View, Text, ScrollView, RefreshControl, ActivityIndicator } from 'react
 import { SafeAreaView } from 'react-native-safe-area-context';
 import api from '../../lib/api';
 import { getColorForScore, getFeelLabel } from '../../types/feel';
+import type { FeelCheck } from '../../types/feel';
 
 interface WeeklyInsight {
   week_start: string;
@@ -31,16 +32,64 @@ const formatDay = (dateStr: string): string => {
   return days[date.getDay()] || '';
 };
 
+function buildCalendarGrid(checks: FeelCheck[]): (FeelCheck | null)[][] {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  const firstDay = new Date(year, month, 1);
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  // Sunday = 0, we want Monday = 0
+  let startDayOfWeek = firstDay.getDay() - 1;
+  if (startDayOfWeek < 0) startDayOfWeek = 6;
+
+  const checkMap: Record<string, FeelCheck> = {};
+  for (const check of checks) {
+    const dateKey = check.check_date.split('T')[0];
+    checkMap[dateKey] = check;
+  }
+
+  const grid: (FeelCheck | null)[][] = [];
+  let currentDay = 1;
+  let weekIndex = 0;
+
+  while (currentDay <= daysInMonth) {
+    const row: (FeelCheck | null)[] = [];
+    for (let col = 0; col < 7; col++) {
+      if (weekIndex === 0 && col < startDayOfWeek) {
+        row.push(null);
+      } else if (currentDay > daysInMonth) {
+        row.push(null);
+      } else {
+        const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(currentDay).padStart(2, '0')}`;
+        row.push(checkMap[dateStr] || ({ check_date: dateStr, feel_score: 0 } as unknown as FeelCheck));
+        currentDay++;
+      }
+    }
+    grid.push(row);
+    weekIndex++;
+  }
+
+  return grid;
+}
+
 export default function InsightsScreen() {
   const [insights, setInsights] = useState<InsightsData | null>(null);
+  const [monthData, setMonthData] = useState<FeelCheck[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const loadInsights = useCallback(async () => {
     try {
-      const res = await api.get('/feels/insights');
-      if (res.data) {
-        setInsights(res.data);
+      const [insightsRes, historyRes] = await Promise.all([
+        api.get('/feels/insights').catch(() => null),
+        api.get('/feels/history?limit=31&offset=0').catch(() => null),
+      ]);
+      if (insightsRes?.data) {
+        setInsights(insightsRes.data);
+      }
+      if (historyRes?.data?.data) {
+        setMonthData(historyRes.data.data);
       }
     } catch (error) {
       console.log('Error loading insights:', error);
@@ -107,6 +156,10 @@ export default function InsightsScreen() {
 
   const checkinPercent = Math.min(100, Math.round((current.total_checkins / 7) * 100));
 
+  const calendarGrid = buildCalendarGrid(monthData);
+  const monthName = new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  const todayStr = new Date().toISOString().split('T')[0];
+
   return (
     <SafeAreaView className="flex-1 bg-gray-950">
       <ScrollView
@@ -144,10 +197,69 @@ export default function InsightsScreen() {
             </View>
           </View>
 
+          {/* Monthly Calendar Heatmap */}
+          <View className="mt-6 rounded-2xl bg-gray-900 p-4 border border-gray-800">
+            <Text className="text-lg font-semibold text-white mb-3">Monthly Overview</Text>
+            <Text className="text-sm text-gray-400 mb-3">{monthName}</Text>
+            {/* Day labels */}
+            <View className="flex-row justify-around mb-2">
+              {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((day, i) => (
+                <Text key={i} className="text-xs font-semibold text-gray-400 text-center" style={{ width: 36 }}>
+                  {day}
+                </Text>
+              ))}
+            </View>
+            {/* Calendar grid */}
+            {calendarGrid.map((week, weekIdx) => (
+              <View key={weekIdx} className="flex-row justify-around mb-1">
+                {week.map((cell, dayIdx) => {
+                  if (!cell) {
+                    return <View key={dayIdx} style={{ width: 36, height: 36 }} />;
+                  }
+                  const dateStr = cell.check_date?.split('T')[0] || '';
+                  const hasCheckin = cell.feel_score > 0;
+                  const isToday = dateStr === todayStr;
+                  const dayNum = dateStr ? parseInt(dateStr.split('-')[2], 10) : 0;
+
+                  return (
+                    <View
+                      key={dayIdx}
+                      className="items-center justify-center rounded-lg"
+                      style={{
+                        width: 36,
+                        height: 36,
+                        backgroundColor: hasCheckin
+                          ? getColorForScore(cell.feel_score) + '40'
+                          : '#1f2937',
+                        borderWidth: isToday ? 2 : 0,
+                        borderColor: isToday ? '#f43f5e' : 'transparent',
+                      }}
+                    >
+                      {dayNum > 0 && (
+                        <Text
+                          className="text-xs"
+                          style={{
+                            color: hasCheckin ? '#fff' : '#6b7280',
+                            fontWeight: hasCheckin ? '600' : '400',
+                          }}
+                        >
+                          {dayNum}
+                        </Text>
+                      )}
+                    </View>
+                  );
+                })}
+              </View>
+            ))}
+          </View>
+
           {/* This Week Stats */}
           <Text className="mt-6 text-lg font-semibold text-white">This Week</Text>
           <View className="mt-3 flex-row gap-3">
-            <View className="flex-1 rounded-2xl bg-gray-900 p-4 border border-gray-800 items-center">
+            <View
+              className="flex-1 rounded-2xl bg-gray-900 p-4 border border-gray-800 items-center"
+              accessibilityLabel={`Average mood this week: ${current.average_mood.toFixed(0)}`}
+            >
               <Text className="text-sm text-gray-400">Mood</Text>
               <Text
                 className="mt-1 text-2xl font-bold"
@@ -219,6 +331,7 @@ export default function InsightsScreen() {
             <View
               className="flex-1 rounded-2xl p-4 border border-gray-800"
               style={{ backgroundColor: '#22c55e15' }}
+              accessibilityLabel={`Best day was ${formatDay(current.best_day)}`}
             >
               <Text className="text-3xl">🌟</Text>
               <Text className="mt-2 text-sm font-semibold text-white">Best Day</Text>
@@ -240,7 +353,12 @@ export default function InsightsScreen() {
           </View>
 
           {/* Check-in Progress */}
-          <View className="mt-6 rounded-2xl bg-gray-900 p-4 border border-gray-800">
+          <View
+            className="mt-6 rounded-2xl bg-gray-900 p-4 border border-gray-800"
+            accessibilityLabel={`Checked in ${current.total_checkins} of 7 days`}
+            accessibilityRole="progressbar"
+            accessibilityValue={{ min: 0, max: 7, now: current.total_checkins }}
+          >
             <View className="flex-row items-center justify-between">
               <Text className="text-sm font-semibold text-white">Check-in Progress</Text>
               <Text className="text-sm text-gray-400">

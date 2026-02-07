@@ -208,6 +208,9 @@ export default function HistoryScreen() {
                 ? 'bg-rose-500'
                 : 'bg-gray-800'
             }`}
+            accessibilityLabel={`Filter by ${filter.label}`}
+            accessibilityRole="button"
+            accessibilityState={{ selected: scoreFilter === filter.key }}
           >
             <Text
               className={`text-sm font-medium ${

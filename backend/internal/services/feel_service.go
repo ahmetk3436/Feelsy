@@ -13,15 +13,16 @@ import (
 )
 
 type FeelService struct {
-	db *gorm.DB
+	db                *gorm.DB
+	moderationService *ModerationService
 }
 
-func NewFeelService(db *gorm.DB) *FeelService {
-	return &FeelService{db: db}
+func NewFeelService(db *gorm.DB, moderationService *ModerationService) *FeelService {
+	return &FeelService{db: db, moderationService: moderationService}
 }
 
 // CreateFeelCheck creates a new daily mood check-in
-func (s *FeelService) CreateFeelCheck(userID uuid.UUID, moodScore, energyScore int, moodEmoji, note string) (*models.FeelCheck, error) {
+func (s *FeelService) CreateFeelCheck(userID uuid.UUID, moodScore, energyScore int, moodEmoji, note, journalEntry string) (*models.FeelCheck, error) {
 	// Validate scores
 	if moodScore < 1 || moodScore > 100 || energyScore < 1 || energyScore > 100 {
 		return nil, errors.New("scores must be between 1 and 100")
@@ -36,13 +37,26 @@ func (s *FeelService) CreateFeelCheck(userID uuid.UUID, moodScore, energyScore i
 		return nil, errors.New("already checked in today")
 	}
 
+	// Filter note for prohibited content
+	if s.moderationService != nil && note != "" {
+		sanitized, _ := s.moderationService.FilterNote(note)
+		note = sanitized
+	}
+
+	// Filter journal entry for prohibited content
+	if s.moderationService != nil && journalEntry != "" {
+		sanitized, _ := s.moderationService.FilterNote(journalEntry)
+		journalEntry = sanitized
+	}
+
 	check := &models.FeelCheck{
-		UserID:      userID,
-		MoodScore:   moodScore,
-		EnergyScore: energyScore,
-		MoodEmoji:   moodEmoji,
-		Note:        note,
-		CheckDate:   today,
+		UserID:       userID,
+		MoodScore:    moodScore,
+		EnergyScore:  energyScore,
+		MoodEmoji:    moodEmoji,
+		Note:         note,
+		JournalEntry: journalEntry,
+		CheckDate:    today,
 	}
 	check.CalculateFeelScore()
 	check.ColorHex = check.GetColorHex()
@@ -55,6 +69,30 @@ func (s *FeelService) CreateFeelCheck(userID uuid.UUID, moodScore, energyScore i
 	go s.UpdateStreak(userID)
 
 	return check, nil
+}
+
+// UpdateJournalEntry updates the journal entry for a specific check-in
+func (s *FeelService) UpdateJournalEntry(userID uuid.UUID, checkID uuid.UUID, journalEntry string) (*models.FeelCheck, error) {
+	var check models.FeelCheck
+	if err := s.db.Where("id = ? AND user_id = ?", checkID, userID).First(&check).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errors.New("check-in not found")
+		}
+		return nil, err
+	}
+
+	// Filter journal entry
+	if s.moderationService != nil && journalEntry != "" {
+		sanitized, _ := s.moderationService.FilterNote(journalEntry)
+		journalEntry = sanitized
+	}
+
+	check.JournalEntry = journalEntry
+	if err := s.db.Save(&check).Error; err != nil {
+		return nil, err
+	}
+
+	return &check, nil
 }
 
 // GetTodayCheck returns today's check-in for a user
@@ -523,29 +561,160 @@ func (s *FeelService) GetWeeklyInsights(userID uuid.UUID) (*dto.InsightsResponse
 	}
 
 	// Generate personalized message
-	var message string
-	switch currentInsight.MoodTrend {
-	case "improving":
-		message = fmt.Sprintf("Great progress! Your mood has improved by %.1f%% this week.", math.Abs(improvement))
-	case "declining":
-		if currentInsight.BestDay != "" {
-			message = fmt.Sprintf("Hang in there! Consider activities that boosted your mood on %s.", currentInsight.BestDay)
-		} else {
-			message = "Hang in there! Try to check in daily to track your progress."
-		}
-	default:
-		if currentInsight.AverageFeel > 0 {
-			message = fmt.Sprintf("Consistent week! Your average feel score is %.1f.", currentInsight.AverageFeel)
-		} else {
-			message = "Start checking in to see your weekly mood insights!"
-		}
-	}
+	message := s.generatePersonalizedMessage(currentInsight, previousInsight, improvement, &streak)
 
 	return &dto.InsightsResponse{
 		CurrentWeek:  currentInsight,
 		PreviousWeek: previousInsight,
 		Improvement:  improvement,
 		Message:      message,
+	}, nil
+}
+
+// generatePersonalizedMessage creates a data-driven insight message
+func (s *FeelService) generatePersonalizedMessage(current, previous dto.WeeklyInsight, improvement float64, streak *models.FeelStreak) string {
+	type messageTemplate struct {
+		condition func() bool
+		message   string
+		idx       int
+	}
+
+	templates := []messageTemplate{
+		{func() bool { return current.AverageFeel >= 80 && improvement > 5 }, "You're on fire this week! Your mood has been climbing steadily. Keep up whatever you're doing!", 0},
+		{func() bool { return current.AverageFeel >= 80 && improvement <= 5 }, "Consistently great vibes! You're maintaining a strong positive mindset.", 1},
+		{func() bool { return current.AverageFeel >= 60 && improvement < -5 }, fmt.Sprintf("Your scores are solid but trending down slightly. Consider what made %s feel so great and replicate it.", current.BestDay), 2},
+		{func() bool { return current.AverageFeel >= 60 && improvement > 5 }, fmt.Sprintf("Nice improvement! Your mood climbed %.1f%% this week. That positive momentum is powerful.", math.Abs(improvement)), 3},
+		{func() bool {
+			return current.AverageMood > current.AverageEnergy+15
+		}, "Your mood is good but energy is lagging. Try getting more sleep or adding a short walk to your routine.", 4},
+		{func() bool {
+			return current.AverageEnergy > current.AverageMood+15
+		}, "Interesting -- high energy but your mood hasn't caught up. Try a calming activity or mindfulness exercise.", 5},
+		{func() bool { return current.TotalCheckIns >= 7 }, fmt.Sprintf("7 days straight -- your consistency is impressive! Regular check-ins build self-awareness."), 6},
+		{func() bool { return current.TotalCheckIns >= 5 }, "Great check-in habit forming! Just a couple more days for a perfect week.", 7},
+		{func() bool { return previous.AverageFeel < 50 && current.AverageFeel >= 50 && improvement > 10 }, fmt.Sprintf("You're bouncing back! Your scores improved by %.1f%% this week. That takes real resilience.", math.Abs(improvement)), 8},
+		{func() bool { return current.AverageFeel < 40 && improvement < -10 }, "Tough week. Remember: tracking even the hard days builds awareness. Consider reaching out to someone you trust.", 9},
+		{func() bool { return current.AverageFeel < 40 }, "Hang in there. Low periods are part of the journey. Each day you check in is a step toward understanding yourself better.", 10},
+		{func() bool {
+			if streak == nil {
+				return false
+			}
+			return streak.CurrentStreak >= 14
+		}, fmt.Sprintf("Two weeks strong! Your %d-day streak shows incredible dedication to self-awareness.", streak.CurrentStreak), 11},
+		{func() bool {
+			if streak == nil {
+				return false
+			}
+			return streak.CurrentStreak >= 7
+		}, "One week streak! You're building a powerful habit of self-reflection.", 12},
+		{func() bool { return current.AverageFeel >= 60 }, fmt.Sprintf("Solid week! Your average feel score is %.0f. Keep the positive energy flowing.", current.AverageFeel), 13},
+		{func() bool { return improvement > 0 }, fmt.Sprintf("Progress! Your mood improved by %.1f%% compared to last week.", math.Abs(improvement)), 14},
+		{func() bool { return improvement < 0 }, fmt.Sprintf("Your mood dipped %.1f%% from last week. Try to identify what changed and adjust.", math.Abs(improvement)), 15},
+		{func() bool { return current.TotalCheckIns > 0 }, "Keep checking in daily to unlock deeper insights about your mood patterns!", 16},
+		{func() bool { return true }, "Start checking in to see your weekly mood insights!", 17},
+	}
+
+	// Try to avoid repeating the same message
+	lastIdx := 0
+	if streak != nil {
+		lastIdx = streak.LastMessageIdx
+	}
+
+	for _, t := range templates {
+		if t.condition() && t.idx != lastIdx {
+			// Update last message index
+			if streak != nil && streak.ID != uuid.Nil {
+				streak.LastMessageIdx = t.idx
+				s.db.Model(streak).Update("last_message_idx", t.idx)
+			}
+			return t.message
+		}
+	}
+
+	// Fallback: allow repeat if no other match
+	for _, t := range templates {
+		if t.condition() {
+			return t.message
+		}
+	}
+
+	return "Start checking in to see your weekly mood insights!"
+}
+
+// GetWeeklyRecap returns a summary of the past 7 days for the recap card
+func (s *FeelService) GetWeeklyRecap(userID uuid.UUID) (*dto.WeeklyRecapResponse, error) {
+	now := time.Now()
+	weekEnd := now.Truncate(24 * time.Hour)
+	weekStart := weekEnd.AddDate(0, 0, -6)
+
+	var checks []models.FeelCheck
+	if err := s.db.Where("user_id = ? AND check_date >= ? AND check_date <= ?", userID, weekStart, weekEnd).
+		Order("check_date ASC").
+		Find(&checks).Error; err != nil {
+		return nil, err
+	}
+
+	if len(checks) == 0 {
+		return nil, errors.New("no check-ins this week")
+	}
+
+	var totalScore float64
+	bestScore := 0
+	bestDay := ""
+	emojiCount := make(map[string]int)
+
+	// Build daily scores array (7 days)
+	dailyScores := make([]int, 7)
+	dateToIndex := make(map[string]int)
+	for i := 0; i < 7; i++ {
+		day := weekStart.AddDate(0, 0, i)
+		dateToIndex[day.Format("2006-01-02")] = i
+	}
+
+	for _, check := range checks {
+		totalScore += float64(check.FeelScore)
+		dateKey := check.CheckDate.Format("2006-01-02")
+		if idx, ok := dateToIndex[dateKey]; ok {
+			dailyScores[idx] = check.FeelScore
+		}
+		if check.FeelScore > bestScore {
+			bestScore = check.FeelScore
+			bestDay = check.CheckDate.Format("Monday")
+		}
+		if check.MoodEmoji != "" {
+			emojiCount[check.MoodEmoji]++
+		}
+	}
+
+	// Find top emoji
+	topEmoji := ""
+	maxCount := 0
+	for emoji, count := range emojiCount {
+		if count > maxCount {
+			maxCount = count
+			topEmoji = emoji
+		}
+	}
+
+	// Get streak
+	currentStreak := 0
+	var streak models.FeelStreak
+	if err := s.db.Where("user_id = ?", userID).First(&streak).Error; err == nil {
+		currentStreak = streak.CurrentStreak
+	}
+
+	avgScore := math.Round((totalScore/float64(len(checks)))*100) / 100
+
+	return &dto.WeeklyRecapResponse{
+		TotalCheckins: len(checks),
+		AverageScore:  avgScore,
+		BestScore:     bestScore,
+		BestDay:       bestDay,
+		TopEmoji:      topEmoji,
+		DailyScores:   dailyScores,
+		CurrentStreak: currentStreak,
+		WeekStart:     weekStart.Format("2006-01-02"),
+		WeekEnd:       weekEnd.Format("2006-01-02"),
 	}, nil
 }
 

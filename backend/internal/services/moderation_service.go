@@ -18,11 +18,38 @@ var (
 	ErrSelfBlock      = errors.New("cannot block yourself")
 )
 
-// ProfanityPatterns is a basic regex-based content filter (Apple Guideline 1.2).
-// In production, replace or augment with an API-based filter (e.g., Perspective API).
-var ProfanityPatterns = []*regexp.Regexp{
-	regexp.MustCompile(`(?i)\b(spam|scam)\b`),
-	// Add more patterns as needed
+// moderationPattern represents a content filter pattern with severity scoring
+type moderationPattern struct {
+	pattern  *regexp.Regexp
+	severity int // 1-10, higher = more severe
+	category string
+}
+
+// Comprehensive content moderation patterns (Apple Guideline 1.2)
+var moderationPatterns = []moderationPattern{
+	// Spam indicators (severity 3-5)
+	{regexp.MustCompile(`(?i)\b(spam|scam|phishing)\b`), 4, "spam"},
+	{regexp.MustCompile(`(?i)\b(buy now|click here|free money|act now)\b`), 3, "spam"},
+	{regexp.MustCompile(`(?i)(https?://\S+){3,}`), 5, "spam"}, // Multiple URLs
+	{regexp.MustCompile(`(.)\1{5,}`), 3, "spam"},               // Repeated characters (e.g., "aaaaaa")
+
+	// Profanity (severity 2-6)
+	{regexp.MustCompile(`(?i)\b(fuck|shit|bitch|asshole|bastard|damn)\b`), 4, "profanity"},
+	{regexp.MustCompile(`(?i)\b(crap|hell|piss|dick|cock|pussy)\b`), 3, "profanity"},
+	{regexp.MustCompile(`(?i)\b(motherfucker|bullshit|goddamn)\b`), 5, "profanity"},
+
+	// Harassment (severity 5-8)
+	{regexp.MustCompile(`(?i)\b(kill yourself|kys|die|go die)\b`), 8, "harassment"},
+	{regexp.MustCompile(`(?i)\b(loser|idiot|stupid|dumb|ugly|fat|worthless)\b`), 4, "harassment"},
+	{regexp.MustCompile(`(?i)\b(hate you|hope you die|you suck)\b`), 7, "harassment"},
+	{regexp.MustCompile(`(?i)\b(retard|retarded)\b`), 6, "harassment"},
+
+	// Self-harm keywords (severity 9-10)
+	{regexp.MustCompile(`(?i)\b(suicide|suicidal|self.?harm|cut myself|end it all)\b`), 9, "self-harm"},
+	{regexp.MustCompile(`(?i)\b(want to die|don't want to live|kill myself)\b`), 10, "self-harm"},
+
+	// Slurs (severity 8-10)
+	{regexp.MustCompile(`(?i)\b(nigger|nigga|faggot|fag|tranny|chink|spic|kike|wetback)\b`), 10, "slur"},
 }
 
 type ModerationService struct {
@@ -35,21 +62,55 @@ func NewModerationService(db *gorm.DB) *ModerationService {
 
 // --- Content Filtering ---
 
-// FilterContent checks text against profanity patterns. Returns true if clean.
+// FilterContent checks text against profanity patterns. Returns true if clean, false if flagged.
 func (s *ModerationService) FilterContent(text string) (bool, string) {
-	for _, pattern := range ProfanityPatterns {
-		if pattern.MatchString(text) {
-			return false, fmt.Sprintf("Content contains prohibited terms matching: %s", pattern.String())
+	totalScore := 0
+	var matched []string
+
+	for _, mp := range moderationPatterns {
+		if mp.pattern.MatchString(text) {
+			totalScore += mp.severity
+			matched = append(matched, mp.category)
 		}
+	}
+
+	if totalScore > 5 {
+		return false, fmt.Sprintf("Content flagged (score %d) in categories: %s", totalScore, strings.Join(uniqueStrings(matched), ", "))
 	}
 	return true, ""
 }
 
-// SanitizeContent removes or replaces prohibited content.
+// SanitizeContent replaces prohibited content with asterisks of the same length.
 func (s *ModerationService) SanitizeContent(text string) string {
 	result := text
-	for _, pattern := range ProfanityPatterns {
-		result = pattern.ReplaceAllString(result, "[filtered]")
+	for _, mp := range moderationPatterns {
+		result = mp.pattern.ReplaceAllStringFunc(result, func(match string) string {
+			return strings.Repeat("*", len(match))
+		})
+	}
+	return result
+}
+
+// FilterNote filters check-in notes for prohibited content.
+// Returns sanitized text and whether the content was flagged.
+func (s *ModerationService) FilterNote(text string) (string, bool) {
+	clean, _ := s.FilterContent(text)
+	if !clean {
+		sanitized := s.SanitizeContent(text)
+		return sanitized, true
+	}
+	return text, false
+}
+
+// uniqueStrings returns unique strings from a slice
+func uniqueStrings(items []string) []string {
+	seen := make(map[string]bool)
+	result := make([]string, 0)
+	for _, item := range items {
+		if !seen[item] {
+			seen[item] = true
+			result = append(result, item)
+		}
 	}
 	return result
 }

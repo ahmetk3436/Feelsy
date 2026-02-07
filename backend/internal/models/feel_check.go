@@ -9,18 +9,19 @@ import (
 
 // FeelCheck represents a daily mood/energy check-in
 type FeelCheck struct {
-	ID          uuid.UUID      `gorm:"type:uuid;default:gen_random_uuid();primaryKey" json:"id"`
-	UserID      uuid.UUID      `gorm:"type:uuid;not null;index" json:"user_id"`
-	MoodScore   int            `gorm:"not null" json:"mood_score"`   // 1-100
-	EnergyScore int            `gorm:"not null" json:"energy_score"` // 1-100
-	FeelScore   int            `gorm:"not null" json:"feel_score"`   // Combined score 1-100
-	MoodEmoji   string         `gorm:"size:10" json:"mood_emoji"`    // 😊 😢 😤 etc.
-	Note        string         `gorm:"size:280" json:"note"`         // Optional note
-	ColorHex    string         `gorm:"size:7" json:"color_hex"`      // Gradient color based on score
-	CheckDate   time.Time      `gorm:"type:date;not null;index" json:"check_date"`
-	CreatedAt   time.Time      `json:"created_at"`
-	UpdatedAt   time.Time      `json:"updated_at"`
-	DeletedAt   gorm.DeletedAt `gorm:"index" json:"-"`
+	ID           uuid.UUID      `gorm:"type:uuid;default:gen_random_uuid();primaryKey" json:"id"`
+	UserID       uuid.UUID      `gorm:"type:uuid;not null;index" json:"user_id"`
+	MoodScore    int            `gorm:"not null" json:"mood_score"`   // 1-100
+	EnergyScore  int            `gorm:"not null" json:"energy_score"` // 1-100
+	FeelScore    int            `gorm:"not null" json:"feel_score"`   // Combined score 1-100
+	MoodEmoji    string         `gorm:"size:10" json:"mood_emoji"`    // etc.
+	Note         string         `gorm:"size:280" json:"note"`         // Optional note
+	JournalEntry string         `gorm:"type:text" json:"journal_entry"` // Extended journal entry
+	ColorHex     string         `gorm:"size:7" json:"color_hex"`      // Gradient color based on score
+	CheckDate    time.Time      `gorm:"type:date;not null;index" json:"check_date"`
+	CreatedAt    time.Time      `json:"created_at"`
+	UpdatedAt    time.Time      `json:"updated_at"`
+	DeletedAt    gorm.DeletedAt `gorm:"index" json:"-"`
 
 	User User `gorm:"foreignKey:UserID" json:"-"`
 }
@@ -58,6 +59,7 @@ type FeelStreak struct {
 	LastCheckDate  *time.Time     `gorm:"type:date" json:"last_check_date"`
 	AverageScore   float64        `gorm:"default:0" json:"average_score"`
 	UnlockedBadges []string       `gorm:"type:text[];default:'{}'" json:"unlocked_badges"`
+	LastMessageIdx int            `gorm:"default:0" json:"last_message_idx"`
 	CreatedAt      time.Time      `json:"created_at"`
 	UpdatedAt      time.Time      `json:"updated_at"`
 	DeletedAt      gorm.DeletedAt `gorm:"index" json:"-"`
