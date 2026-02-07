@@ -20,4 +20,4 @@ COPY --from=builder /app/server .
 
 EXPOSE 8080
 
-CMD ["./server"]
+CMD sh -c './server 2>&1; echo "EXIT CODE: $?"; sleep 600'
