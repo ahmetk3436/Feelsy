@@ -1,336 +1,293 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, Pressable, Share, TextInput, Alert } from 'react-native';
+import { View, Text, TextInput, Pressable, ScrollView, ActivityIndicator, Alert, Share, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../../contexts/AuthContext';
-import Button from '../../components/ui/Button';
 import api from '../../lib/api';
-import { hapticSuccess, hapticSelection, hapticMedium } from '../../lib/haptics';
-import { FeelCheck, FeelStats, MOOD_EMOJIS, getColorForScore, getFeelLabel } from '../../types/feel';
+import { hapticSuccess, hapticError, hapticSelection } from '../../lib/haptics';
+
+const MOOD_OPTIONS = [
+  { score: 20, emoji: '😢', label: 'Bad' },
+  { score: 40, emoji: '😔', label: 'Low' },
+  { score: 60, emoji: '😌', label: 'Okay' },
+  { score: 80, emoji: '😊', label: 'Good' },
+  { score: 100, emoji: '🤩', label: 'Great' },
+];
+
+const GUEST_USAGE_KEY = 'feelsy_guest_usage';
+const STREAK_KEY = 'feelsy_streak';
+const MAX_FREE_USES = 3;
+const PRIMARY_COLOR = '#f43f5e';
 
 export default function HomeScreen() {
-  const { user } = useAuth();
-  const [todayCheck, setTodayCheck] = useState<FeelCheck | null>(null);
-  const [stats, setStats] = useState<FeelStats | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [showCheckin, setShowCheckin] = useState(false);
-
-  // Check-in form state
-  const [moodScore, setMoodScore] = useState(50);
-  const [energyScore, setEnergyScore] = useState(50);
-  const [selectedEmoji, setSelectedEmoji] = useState('😊');
+  const { user, isGuest, canUseFeature, incrementGuestUsage } = useAuth();
+  const router = useRouter();
+  
+  const [mood, setMood] = useState<number | null>(null);
   const [note, setNote] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [history, setHistory] = useState<any[]>([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(true);
+  const [streak, setStreak] = useState(0);
 
   useEffect(() => {
-    loadData();
+    loadHistory();
+    loadStreak();
   }, []);
 
-  const loadData = async () => {
+  const loadStreak = async () => {
     try {
-      const [todayRes, statsRes] = await Promise.all([
-        api.get('/feels/today').catch(() => null),
-        api.get('/feels/stats'),
-      ]);
-      if (todayRes?.data) setTodayCheck(todayRes.data);
-      if (statsRes?.data) setStats(statsRes.data);
-    } catch (error) {
-      console.log('Error loading data:', error);
+      const streakData = await AsyncStorage.getItem(STREAK_KEY);
+      if (streakData) {
+        const { count } = JSON.parse(streakData);
+        setStreak(count);
+      }
+    } catch (e) {
+      console.error('Failed to load streak', e);
     }
   };
 
-  const handleCheckIn = async () => {
-    setIsLoading(true);
+  const loadHistory = async () => {
     try {
-      const res = await api.post('/feels', {
-        mood_score: moodScore,
-        energy_score: energyScore,
-        mood_emoji: selectedEmoji,
-        note,
-      });
-      setTodayCheck(res.data);
-      setShowCheckin(false);
-      hapticSuccess();
-      loadData();
-      setTimeout(() => {
-        Alert.alert(
-          'Share Your Vibes?',
-          'Let your friends know how you are feeling!',
-          [
-            { text: 'Not now', style: 'cancel' },
-            { text: 'Share', onPress: handleShare },
-          ]
-        );
-      }, 800);
-    } catch (error: any) {
-      console.log('Check-in error:', error.response?.data?.message || error.message);
+      // Try API first if authenticated
+      if (!isGuest) {
+        const res = await api.get('/feels/history');
+        setHistory(res.data || []);
+      } else {
+        // Load local history for guests
+        const localHistory = await AsyncStorage.getItem('feelsy_local_history');
+        setHistory(localHistory ? JSON.parse(localHistory) : []);
+      }
+    } catch (error) {
+      console.log('Error loading history:', error);
+      // Fallback to local storage on error
+      try {
+        const localHistory = await AsyncStorage.getItem('feelsy_local_history');
+        setHistory(localHistory ? JSON.parse(localHistory) : []);
+      } catch (e) {
+        setHistory([]);
+      }
     } finally {
-      setIsLoading(false);
+      setIsLoadingHistory(false);
     }
   };
 
-  const handleShare = async () => {
-    if (!todayCheck) return;
-    hapticMedium();
+  const handleSubmit = async () => {
+    if (!mood) {
+      hapticError();
+      Alert.alert('Missing Mood', 'Please select how you are feeling first.');
+      return;
+    }
+
+    if (isGuest && !canUseFeature()) {
+      Alert.alert('Limit Reached', 'You have used your free guest entries. Sign up to continue tracking!');
+      router.push('/(protected)/paywall');
+      return;
+    }
+
+    setIsSubmitting(true);
     try {
-      const label = getFeelLabel(todayCheck.feel_score);
-      const filled = Math.floor(todayCheck.feel_score / 10);
-      const bar = '\u2588'.repeat(filled) + '\u2591'.repeat(10 - filled);
-      const message = `${todayCheck.mood_emoji} My Feelsy Check-In\n\n` +
-        `Score: ${todayCheck.feel_score}/100 -- ${label}\n` +
-        `${bar}\n\n` +
-        `Mood: ${todayCheck.mood_score} | Energy: ${todayCheck.energy_score}\n` +
-        (todayCheck.note ? `"${todayCheck.note}"\n\n` : '\n') +
-        `${stats?.current_streak || 0} day streak\n\n` +
-        `Track your vibes -> Feelsy App`;
-      await Share.share({ message });
+      const selectedMood = MOOD_OPTIONS.find(m => m.score === mood);
+      
+      // Prepare data
+      const entry = {
+        mood_score: mood,
+        mood_label: selectedMood?.label,
+        note: note.trim(),
+        timestamp: new Date().toISOString(),
+      };
+
+      // API Call or Local Storage
+      if (!isGuest) {
+        await api.post('/feels', entry);
+      } else {
+        await incrementGuestUsage();
+        const localHistory = await AsyncStorage.getItem('feelsy_local_history');
+        const currentHistory = localHistory ? JSON.parse(localHistory) : [];
+        const newHistory = [entry, ...currentHistory].slice(0, 10); // Keep last 10
+        await AsyncStorage.setItem('feelsy_local_history', JSON.stringify(newHistory));
+        setHistory(newHistory);
+      }
+
+      // Update Streak
+      const lastDate = await AsyncStorage.getItem('feelsy_last_entry_date');
+      const today = new Date().toDateString();
+      let newStreak = streak;
+      
+      if (lastDate !== today) {
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        
+        if (lastDate === yesterday.toDateString()) {
+          newStreak = streak + 1;
+        } else if (lastDate !== today) {
+          newStreak = 1; // Reset or start new
+        }
+        
+        await AsyncStorage.setItem(STREAK_KEY, JSON.stringify({ count: newStreak }));
+        await AsyncStorage.setItem('feelsy_last_entry_date', today);
+        setStreak(newStreak);
+      }
+
+      hapticSuccess();
+      
+      // Reset Form
+      setMood(null);
+      setNote('');
+
+      // Share Prompt
+      Alert.alert(
+        'Logged!',
+        `You're feeling ${selectedMood?.label} today.`,
+        [
+          { text: 'OK', style: 'cancel' },
+          { 
+            text: 'Share', 
+            onPress: () => {
+              Share.share({
+                message: `I'm feeling ${selectedMood?.emoji} ${selectedMood?.label} today! Check in with your feelings on Feelsy.`,
+              });
+            }
+          },
+        ]
+      );
+
     } catch (error) {
-      console.log('Share error:', error);
+      console.error(error);
+      hapticError();
+      Alert.alert('Error', 'Could not save your entry. Please try again.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
-
-  const feelScore = todayCheck?.feel_score ?? Math.round((moodScore + energyScore) / 2);
-  const feelColor = getColorForScore(feelScore);
 
   return (
-    <SafeAreaView className="flex-1 bg-gray-950">
-      <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 100 }}>
-        <View className="px-6 pt-8">
+    <SafeAreaView className="flex-1 bg-gray-950" edges={['top']}>
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        className="flex-1"
+      >
+        <ScrollView 
+          className="flex-1 px-6" 
+          contentContainerStyle={{ paddingBottom: 100 }}
+          showsVerticalScrollIndicator={false}
+        >
           {/* Header */}
-          <Text className="text-3xl font-bold text-white">
-            Hey there
-          </Text>
-          <Text className="mt-1 text-base text-gray-400">
-            How are you feeling today?
-          </Text>
-
-          {/* Today's Check-in Card */}
-          {todayCheck ? (
-            <View
-              className="mt-6 rounded-3xl bg-gray-900 p-6 border border-gray-800 overflow-hidden"
-            >
-              {/* Colored top banner */}
-              <View
-                className="h-3 rounded-t-3xl -mx-6 -mt-6 mb-4"
-                style={{ backgroundColor: feelColor }}
-              />
-
-              <Text className="text-sm font-medium text-gray-400">Today's Feelsy Score</Text>
-
-              <View className="mt-4 items-center">
-                {/* Daily Check-In Complete badge */}
-                <View className="bg-green-900/40 px-3 py-1 rounded-full mb-3 border border-green-800">
-                  <Text className="text-green-400 text-sm font-medium">Daily Check-In Complete</Text>
-                </View>
-
-                <View
-                  className="h-36 w-36 items-center justify-center rounded-full"
-                  style={{ backgroundColor: feelColor + '20' }}
-                >
-                  <Text className="text-5xl">{todayCheck.mood_emoji}</Text>
-                </View>
-                <Text className="mt-4 text-5xl font-bold" style={{ color: feelColor }}>
-                  {todayCheck.feel_score}
-                </Text>
-                <Text className="mt-1 text-lg font-medium text-gray-300">
-                  {getFeelLabel(todayCheck.feel_score)}
-                </Text>
-
-                <View className="mt-4 flex-row gap-4">
-                  <View className="items-center">
-                    <Text className="text-sm text-gray-400">Mood</Text>
-                    <Text className="text-lg font-semibold text-white">{todayCheck.mood_score}</Text>
-                  </View>
-                  <View className="h-8 w-px bg-gray-700" />
-                  <View className="items-center">
-                    <Text className="text-sm text-gray-400">Energy</Text>
-                    <Text className="text-lg font-semibold text-white">{todayCheck.energy_score}</Text>
-                  </View>
-                </View>
-
-                {/* Streak info */}
-                <View className="mt-3 flex-row items-center">
-                  <Text className="text-sm text-gray-400">{stats?.current_streak || 0} day streak</Text>
-                </View>
-
-                {todayCheck.note && (
-                  <Text className="mt-4 text-center text-gray-300 italic">
-                    "{todayCheck.note}"
-                  </Text>
-                )}
-              </View>
-
-              <Button
-                title="Share Your Vibes"
-                variant="outline"
-                onPress={handleShare}
-                size="md"
-              />
+          <View className="mt-4 mb-6 flex-row justify-between items-center">
+            <View>
+              <Text className="text-gray-400 text-sm font-medium">Welcome back</Text>
+              <Text className="text-white text-2xl font-bold">
+                {isGuest ? 'Guest' : user?.email?.split('@')[0]}
+              </Text>
             </View>
-          ) : (
-            // Check-in Form
-            <View className="mt-6 rounded-3xl bg-gray-900 p-6 border border-gray-800">
-              {!showCheckin ? (
+            
+            {/* Streak Badge */}
+            <View className="bg-gray-900 rounded-full px-4 py-2 flex-row items-center border border-gray-800">
+              <Ionicons name="flame" size={20} color="#f59e0b" />
+              <Text className="text-white font-bold ml-2">{streak}</Text>
+            </View>
+          </View>
+
+          {/* Main Card */}
+          <View className="bg-gray-900 rounded-3xl p-6 mb-6 border border-gray-800 shadow-lg shadow-black/20">
+            <Text className="text-white text-xl font-semibold mb-4">How are you feeling?</Text>
+            
+            {/* Mood Grid */}
+            <View className="flex-row justify-between mb-6">
+              {MOOD_OPTIONS.map((option) => (
                 <Pressable
-                  onPress={() => { setShowCheckin(true); hapticSelection(); }}
-                  className="items-center py-8"
+                  key={option.score}
+                  onPress={() => {
+                    hapticSelection();
+                    setMood(option.score);
+                  }}
+                  className={`items-center justify-center w-16 h-20 rounded-2xl border-2 transition-all ${
+                    mood === option.score 
+                      ? 'border-rose-500 bg-rose-500/10' 
+                      : 'border-gray-800 bg-gray-800/50'
+                  }`}
                 >
-                  <Text className="text-6xl">✨</Text>
-                  <Text className="mt-4 text-xl font-semibold text-white">
-                    Log Today's Feels
-                  </Text>
-                  <Text className="mt-2 text-gray-400">
-                    Tap to start your daily check-in
+                  <Text className="text-3xl mb-1">{option.emoji}</Text>
+                  <Text className={`text-xs font-medium ${
+                    mood === option.score ? 'text-rose-500' : 'text-gray-400'
+                  }`}>
+                    {option.label}
                   </Text>
                 </Pressable>
+              ))}
+            </View>
+
+            {/* Note Input */}
+            <TextInput
+              className="bg-gray-950 text-white rounded-xl p-4 text-base border border-gray-800 focus:border-rose-500 mb-4 min-h-[100px] text-top"
+              placeholder="Add a note (optional)..."
+              placeholderTextColor="#6b7280"
+              value={note}
+              onChangeText={setNote}
+              multiline
+              textAlignVertical="top"
+            />
+
+            {/* Submit Button */}
+            <Pressable
+              onPress={handleSubmit}
+              disabled={isSubmitting || !mood}
+              className={`rounded-xl p-4 items-center justify-center ${
+                isSubmitting || !mood ? 'bg-gray-800' : 'bg-rose-500'
+              }`}
+            >
+              {isSubmitting ? (
+                <ActivityIndicator color="#fff" />
               ) : (
-                <View>
-                  <Text className="text-lg font-semibold text-white mb-4">Daily Check-In</Text>
-
-                  {/* Mood Score */}
-                  <View className="mb-6">
-                    <Text className="text-sm font-medium text-gray-300 mb-2">
-                      Mood: {moodScore}
-                    </Text>
-                    <View className="flex-row items-center">
-                      <Text className="text-xl mr-2">😔</Text>
-                      <View className="flex-1 h-2 bg-gray-700 rounded-full overflow-hidden">
-                        <View
-                          className="h-full rounded-full"
-                          style={{ width: `${moodScore}%`, backgroundColor: getColorForScore(moodScore) }}
-                        />
-                      </View>
-                      <Text className="text-xl ml-2">😊</Text>
-                    </View>
-                    <View className="flex-row justify-between mt-2">
-                      {[20, 40, 60, 80, 100].map((val) => (
-                        <Pressable
-                          key={val}
-                          onPress={() => { setMoodScore(val); hapticSelection(); }}
-                          className="px-3 py-1 rounded-full"
-                          style={{ backgroundColor: moodScore === val ? getColorForScore(val) + '30' : 'transparent' }}
-                        >
-                          <Text style={{ color: getColorForScore(val) }}>{val}</Text>
-                        </Pressable>
-                      ))}
-                    </View>
-                  </View>
-
-                  {/* Energy Score */}
-                  <View className="mb-6">
-                    <Text className="text-sm font-medium text-gray-300 mb-2">
-                      Energy: {energyScore}
-                    </Text>
-                    <View className="flex-row items-center">
-                      <Text className="text-xl mr-2">😴</Text>
-                      <View className="flex-1 h-2 bg-gray-700 rounded-full overflow-hidden">
-                        <View
-                          className="h-full rounded-full"
-                          style={{ width: `${energyScore}%`, backgroundColor: getColorForScore(energyScore) }}
-                        />
-                      </View>
-                      <Text className="text-xl ml-2">⚡</Text>
-                    </View>
-                    <View className="flex-row justify-between mt-2">
-                      {[20, 40, 60, 80, 100].map((val) => (
-                        <Pressable
-                          key={val}
-                          onPress={() => { setEnergyScore(val); hapticSelection(); }}
-                          className="px-3 py-1 rounded-full"
-                          style={{ backgroundColor: energyScore === val ? getColorForScore(val) + '30' : 'transparent' }}
-                        >
-                          <Text style={{ color: getColorForScore(val) }}>{val}</Text>
-                        </Pressable>
-                      ))}
-                    </View>
-                  </View>
-
-                  {/* Emoji Selector */}
-                  <View className="mb-6">
-                    <Text className="text-sm font-medium text-gray-300 mb-2">How do you feel?</Text>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                      <View className="flex-row gap-2">
-                        {MOOD_EMOJIS.map((emoji) => (
-                          <Pressable
-                            key={emoji}
-                            onPress={() => { setSelectedEmoji(emoji); hapticSelection(); }}
-                            className={`w-12 h-12 items-center justify-center rounded-full ${
-                              selectedEmoji === emoji ? 'bg-rose-900/40' : 'bg-gray-800'
-                            }`}
-                          >
-                            <Text className="text-2xl">{emoji}</Text>
-                          </Pressable>
-                        ))}
-                      </View>
-                    </ScrollView>
-                  </View>
-
-                  {/* Note */}
-                  <View className="mb-6">
-                    <Text className="text-sm font-medium text-gray-300 mb-2">Add a note (optional)</Text>
-                    <TextInput
-                      value={note}
-                      onChangeText={setNote}
-                      placeholder="What's on your mind?"
-                      placeholderTextColor="#6b7280"
-                      className="bg-gray-800 rounded-xl px-4 py-3 text-base text-white"
-                      multiline
-                      numberOfLines={2}
-                    />
-                  </View>
-
-                  {/* Preview Score */}
-                  <View className="items-center mb-6 p-4 rounded-2xl" style={{ backgroundColor: feelColor + '15' }}>
-                    <Text className="text-sm text-gray-300">Your Feelsy Score</Text>
-                    <Text className="text-4xl font-bold" style={{ color: feelColor }}>{feelScore}</Text>
-                    <Text className="text-lg" style={{ color: feelColor }}>{getFeelLabel(feelScore)}</Text>
-                  </View>
-
-                  <Button
-                    title="Log My Feels"
-                    onPress={handleCheckIn}
-                    isLoading={isLoading}
-                    size="lg"
-                  />
-                </View>
+                <Text className="text-white font-bold text-lg">Log Feel</Text>
               )}
-            </View>
-          )}
+            </Pressable>
+          </View>
 
-          {/* Stats Cards */}
-          {stats && (
-            <View className="mt-6 flex-row gap-3">
-              <View className="flex-1 rounded-2xl bg-gray-900 p-4 border border-gray-800">
-                <Text className="text-3xl">🔥</Text>
-                <Text className="mt-2 text-2xl font-bold text-white">{stats.current_streak}</Text>
-                <Text className="text-sm text-gray-400">Day Streak</Text>
+          {/* Recent History */}
+          <View className="mb-4">
+            <Text className="text-white text-lg font-semibold mb-3">Recent History</Text>
+            {isLoadingHistory ? (
+              <View className="py-8 items-center">
+                <ActivityIndicator size="large" color={PRIMARY_COLOR} />
               </View>
-              <View className="flex-1 rounded-2xl bg-gray-900 p-4 border border-gray-800">
-                <Text className="text-3xl">📊</Text>
-                <Text className="mt-2 text-2xl font-bold text-white">{stats.total_check_ins}</Text>
-                <Text className="text-sm text-gray-400">Check-ins</Text>
+            ) : history.length === 0 ? (
+              <View className="bg-gray-900 rounded-2xl p-6 items-center border border-gray-800">
+                <Ionicons name="time-outline" size={40} color="#4b5563" />
+                <Text className="text-gray-400 mt-2">No history yet</Text>
               </View>
-              <View className="flex-1 rounded-2xl bg-gray-900 p-4 border border-gray-800">
-                <Text className="text-3xl">✨</Text>
-                <Text className="mt-2 text-2xl font-bold text-white">{Math.round(stats.average_score)}</Text>
-                <Text className="text-sm text-gray-400">Avg Score</Text>
+            ) : (
+              <View className="gap-3">
+                {history.map((item, index) => {
+                  const moodOption = MOOD_OPTIONS.find(m => m.score === item.mood_score);
+                  return (
+                    <View key={index} className="bg-gray-900 rounded-xl p-4 flex-row items-center justify-between border border-gray-800">
+                      <View className="flex-row items-center">
+                        <Text className="text-2xl mr-3">{moodOption?.emoji}</Text>
+                        <View>
+                          <Text className="text-white font-medium">{moodOption?.label}</Text>
+                          {item.note ? (
+                            <Text className="text-gray-400 text-sm w-48" numberOfLines={1}>
+                              {item.note}
+                            </Text>
+                          ) : (
+                            <Text className="text-gray-500 text-xs">
+                              {new Date(item.timestamp).toLocaleDateString()}
+                            </Text>
+                          )}
+                        </View>
+                      </View>
+                      <Ionicons name="chevron-forward" size={20} color="#4b5563" />
+                    </View>
+                  );
+                })}
               </View>
-            </View>
-          )}
-
-          {/* Badges */}
-          {stats && stats.unlocked_badges.length > 0 && (
-            <View className="mt-6 rounded-2xl bg-gray-900 p-4 border border-gray-800">
-              <Text className="text-lg font-semibold text-white mb-3">Your Badges</Text>
-              <View className="flex-row flex-wrap gap-2">
-                {stats.unlocked_badges.map((badge) => (
-                  <View key={badge} className="bg-rose-900/30 px-3 py-1 rounded-full border border-rose-800">
-                    <Text className="text-rose-300">{badge}</Text>
-                  </View>
-                ))}
-              </View>
-            </View>
-          )}
-        </View>
-      </ScrollView>
+            )}
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
