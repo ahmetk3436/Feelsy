@@ -162,7 +162,7 @@ func (s *FeelService) UpdateStreak(userID uuid.UUID) error {
 			LongestStreak:  1,
 			TotalCheckIns:  1,
 			LastCheckDate:  &today,
-			UnlockedBadges: []string{},
+			UnlockedBadges: models.StringArray{},
 		}
 		return s.db.Create(&streak).Error
 	}
@@ -203,7 +203,7 @@ func (s *FeelService) UpdateStreak(userID uuid.UUID) error {
 	return s.db.Save(&streak).Error
 }
 
-func (s *FeelService) checkBadgeUnlocks(streak, total int, current []string) []string {
+func (s *FeelService) checkBadgeUnlocks(streak, total int, current models.StringArray) models.StringArray {
 	badges := make(map[string]bool)
 	for _, b := range current {
 		badges[b] = true
@@ -234,7 +234,7 @@ func (s *FeelService) checkBadgeUnlocks(streak, total int, current []string) []s
 		badges["total_100"] = true
 	}
 
-	result := make([]string, 0, len(badges))
+	result := make(models.StringArray, 0, len(badges))
 	for badge := range badges {
 		result = append(result, badge)
 	}

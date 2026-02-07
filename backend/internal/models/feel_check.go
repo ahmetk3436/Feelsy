@@ -1,11 +1,45 @@
 package models
 
 import (
+	"database/sql/driver"
+	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
+
+// StringArray is a custom type for storing string arrays as JSON in PostgreSQL
+type StringArray []string
+
+func (a StringArray) Value() (driver.Value, error) {
+	if a == nil {
+		return "[]", nil
+	}
+	b, err := json.Marshal(a)
+	if err != nil {
+		return nil, err
+	}
+	return string(b), nil
+}
+
+func (a *StringArray) Scan(value interface{}) error {
+	if value == nil {
+		*a = StringArray{}
+		return nil
+	}
+	var bytes []byte
+	switch v := value.(type) {
+	case string:
+		bytes = []byte(v)
+	case []byte:
+		bytes = v
+	default:
+		return fmt.Errorf("cannot scan type %T into StringArray", value)
+	}
+	return json.Unmarshal(bytes, a)
+}
 
 // FeelCheck represents a daily mood/energy check-in
 type FeelCheck struct {
@@ -58,7 +92,7 @@ type FeelStreak struct {
 	TotalCheckIns  int            `gorm:"default:0" json:"total_check_ins"`
 	LastCheckDate  *time.Time     `gorm:"type:date" json:"last_check_date"`
 	AverageScore   float64        `gorm:"default:0" json:"average_score"`
-	UnlockedBadges []string       `gorm:"type:text[];default:'{}'" json:"unlocked_badges"`
+	UnlockedBadges StringArray    `gorm:"type:text;default:'[]'" json:"unlocked_badges"`
 	LastMessageIdx int            `gorm:"default:0" json:"last_message_idx"`
 	CreatedAt      time.Time      `json:"created_at"`
 	UpdatedAt      time.Time      `json:"updated_at"`
