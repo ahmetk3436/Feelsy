@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -22,10 +21,7 @@ import (
 )
 
 func main() {
-	fmt.Println("=== Feelsy backend starting ===")
 	cfg := config.Load()
-	fmt.Printf("DB_HOST=%s DB_PORT=%s DB_USER=%s DB_NAME=%s PORT=%s JWT_SECRET_LEN=%d DB_PASSWORD_LEN=%d\n",
-		cfg.DBHost, cfg.DBPort, cfg.DBUser, cfg.DBName, cfg.Port, len(cfg.JWTSecret), len(cfg.DBPassword))
 
 	if cfg.JWTSecret == "" {
 		log.Fatal("JWT_SECRET environment variable is required")
@@ -35,15 +31,12 @@ func main() {
 	}
 
 	// Database
-	fmt.Println("=== Connecting to database ===")
 	if err := database.Connect(cfg); err != nil {
 		log.Fatalf("Database connection failed: %v", err)
 	}
-	fmt.Println("=== Database connected, running migrations ===")
 	if err := database.Migrate(); err != nil {
 		log.Fatalf("Database migration failed: %v", err)
 	}
-	fmt.Println("=== Migrations complete, initializing services ===")
 
 	// Services
 	authService := services.NewAuthService(database.DB, cfg)

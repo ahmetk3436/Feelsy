@@ -31,7 +31,7 @@ var moderationPatterns = []moderationPattern{
 	{regexp.MustCompile(`(?i)\b(spam|scam|phishing)\b`), 4, "spam"},
 	{regexp.MustCompile(`(?i)\b(buy now|click here|free money|act now)\b`), 3, "spam"},
 	{regexp.MustCompile(`(?i)(https?://\S+){3,}`), 5, "spam"}, // Multiple URLs
-	{regexp.MustCompile(`(.)\1{5,}`), 3, "spam"},               // Repeated characters (e.g., "aaaaaa")
+	{regexp.MustCompile(`[a-zA-Z]{20,}`), 3, "spam"},              // Long repeated/gibberish text
 
 	// Profanity (severity 2-6)
 	{regexp.MustCompile(`(?i)\b(fuck|shit|bitch|asshole|bastard|damn)\b`), 4, "profanity"},
