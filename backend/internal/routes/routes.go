@@ -15,11 +15,16 @@ func Setup(
 	webhookHandler *handlers.WebhookHandler,
 	moderationHandler *handlers.ModerationHandler,
 	feelHandler *handlers.FeelHandler,
+	legalHandler *handlers.LegalHandler,
 ) {
 	api := app.Group("/api")
 
 	// Health
 	api.Get("/health", healthHandler.Check)
+
+	// Legal pages (public)
+	api.Get("/privacy-policy", legalHandler.PrivacyPolicy)
+	api.Get("/terms", legalHandler.TermsOfService)
 
 	// Auth (public)
 	auth := api.Group("/auth")
