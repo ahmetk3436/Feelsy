@@ -35,9 +35,6 @@ func Connect(cfg *config.Config) error {
 }
 
 func Migrate() error {
-	// Drop feel_streaks if it has incompatible column types from previous migration
-	DB.Exec("DROP TABLE IF EXISTS feel_streaks CASCADE")
-
 	err := DB.AutoMigrate(
 		&models.User{},
 		&models.RefreshToken{},
