@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/lib/pq"
 	"gorm.io/gorm"
 )
 
@@ -59,7 +58,7 @@ type FeelStreak struct {
 	TotalCheckIns  int            `gorm:"default:0" json:"total_check_ins"`
 	LastCheckDate  *time.Time     `gorm:"type:date" json:"last_check_date"`
 	AverageScore   float64        `gorm:"default:0" json:"average_score"`
-	UnlockedBadges pq.StringArray `gorm:"type:text[];default:'{}'" json:"unlocked_badges"`
+	UnlockedBadges string         `gorm:"type:text;default:''" json:"unlocked_badges"` // Comma-separated badge IDs
 	LastMessageIdx int            `gorm:"default:0" json:"last_message_idx"`
 	CreatedAt      time.Time      `json:"created_at"`
 	UpdatedAt      time.Time      `json:"updated_at"`

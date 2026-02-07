@@ -4,12 +4,12 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"strings"
 	"time"
 
 	"github.com/ahmetcoskunkizilkaya/feelsy/backend/internal/dto"
 	"github.com/ahmetcoskunkizilkaya/feelsy/backend/internal/models"
 	"github.com/google/uuid"
-	"github.com/lib/pq"
 	"gorm.io/gorm"
 )
 
@@ -140,12 +140,19 @@ func (s *FeelService) GetFeelStats(userID uuid.UUID) (map[string]interface{}, er
 		return nil, err
 	}
 
+	var badgeList []string
+	if streak.UnlockedBadges != "" {
+		badgeList = strings.Split(streak.UnlockedBadges, ",")
+	} else {
+		badgeList = []string{}
+	}
+
 	return map[string]interface{}{
 		"current_streak":  streak.CurrentStreak,
 		"longest_streak":  streak.LongestStreak,
 		"total_check_ins": streak.TotalCheckIns,
 		"average_score":   streak.AverageScore,
-		"unlocked_badges": streak.UnlockedBadges,
+		"unlocked_badges": badgeList,
 	}, nil
 }
 
@@ -163,7 +170,7 @@ func (s *FeelService) UpdateStreak(userID uuid.UUID) error {
 			LongestStreak:  1,
 			TotalCheckIns:  1,
 			LastCheckDate:  &today,
-			UnlockedBadges: pq.StringArray{},
+			UnlockedBadges: "",
 		}
 		return s.db.Create(&streak).Error
 	}
@@ -204,10 +211,12 @@ func (s *FeelService) UpdateStreak(userID uuid.UUID) error {
 	return s.db.Save(&streak).Error
 }
 
-func (s *FeelService) checkBadgeUnlocks(streak, total int, current pq.StringArray) pq.StringArray {
+func (s *FeelService) checkBadgeUnlocks(streak, total int, current string) string {
 	badges := make(map[string]bool)
-	for _, b := range current {
-		badges[b] = true
+	if current != "" {
+		for _, b := range strings.Split(current, ",") {
+			badges[b] = true
+		}
 	}
 
 	// Streak badges
@@ -235,11 +244,11 @@ func (s *FeelService) checkBadgeUnlocks(streak, total int, current pq.StringArra
 		badges["total_100"] = true
 	}
 
-	result := make(pq.StringArray, 0, len(badges))
+	result := make([]string, 0, len(badges))
 	for badge := range badges {
 		result = append(result, badge)
 	}
-	return result
+	return strings.Join(result, ",")
 }
 
 // SendGoodVibe sends positive energy to a friend
