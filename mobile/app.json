@@ -35,7 +35,21 @@
     },
     "plugins": [
       "expo-router",
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-linear-gradient",
+        {
+          "colors": ["#6366f1", "#ec4899", "#f43f5e"]
+        }
+      ],
+      [
+        "expo-blur",
+        {
+          "android": {
+            "compileSdk": 34
+          }
+        }
+      ]
     ],
     "runtimeVersion": {
       "policy": "appVersion"
